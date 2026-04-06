@@ -12,6 +12,14 @@ type FragranceRow = {
   fragranticaUrl: string;
 };
 
+type FragranticaPreview = {
+  name: string;
+  brand: string;
+  notes: string;
+  tags: FragranceTag[];
+  fragranticaUrl: string;
+};
+
 type TodayPayload =
   | {
       ok: true;
@@ -61,7 +69,16 @@ export default function Home() {
   const [newBrand, setNewBrand] = useState("");
   const [newTags, setNewTags] = useState<FragranceTag[]>([]);
   const [newNotes, setNewNotes] = useState("");
+  const [newFragranticaUrl, setNewFragranticaUrl] = useState("");
   const [adding, setAdding] = useState(false);
+
+  const [addSource, setAddSource] = useState<"manual" | "fragrantica">("manual");
+  const [fcMode, setFcMode] = useState<"url" | "search">("url");
+  const [fcUrl, setFcUrl] = useState("");
+  const [fcQuery, setFcQuery] = useState("");
+  const [fcLoading, setFcLoading] = useState(false);
+  const [fcError, setFcError] = useState<string | null>(null);
+  const [fcResults, setFcResults] = useState<FragranticaPreview[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,6 +127,73 @@ export default function Home() {
     }
   }
 
+  function applyFragranticaPreview(p: FragranticaPreview) {
+    setNewName(p.name);
+    setNewBrand(p.brand);
+    setNewNotes(p.notes);
+    setNewTags(p.tags);
+    setNewFragranticaUrl(p.fragranticaUrl);
+    setFcResults([]);
+    setFcError(null);
+    setAddSource("manual");
+  }
+
+  async function fetchFragranticaFromUrl(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fcUrl.trim()) return;
+    setFcLoading(true);
+    setFcError(null);
+    setFcResults([]);
+    try {
+      const res = await fetch("/api/fragrances/fragrantica", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: fcUrl.trim() }),
+      });
+      const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+      if (!res.ok) {
+        setFcError(typeof body.error === "string" ? body.error : "Could not fetch from Apify.");
+        return;
+      }
+      const list = Array.isArray(body.results) ? body.results : [];
+      if (list.length === 0) {
+        setFcError("No perfume data returned. Check the URL or try search.");
+        return;
+      }
+      applyFragranticaPreview(list[0]!);
+    } finally {
+      setFcLoading(false);
+    }
+  }
+
+  async function fetchFragranticaSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fcQuery.trim()) return;
+    setFcLoading(true);
+    setFcError(null);
+    setFcResults([]);
+    try {
+      const res = await fetch("/api/fragrances/fragrantica", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: fcQuery.trim() }),
+      });
+      const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+      if (!res.ok) {
+        setFcError(typeof body.error === "string" ? body.error : "Search failed.");
+        return;
+      }
+      const list = Array.isArray(body.results) ? body.results : [];
+      if (list.length === 0) {
+        setFcError("No matches. Try another query.");
+        return;
+      }
+      setFcResults(list);
+    } finally {
+      setFcLoading(false);
+    }
+  }
+
   async function addFragrance(e: React.FormEvent) {
     e.preventDefault();
     if (!newName.trim() || !newBrand.trim()) return;
@@ -123,12 +207,14 @@ export default function Home() {
           brand: newBrand.trim(),
           tags: newTags,
           notes: newNotes,
+          fragranticaUrl: newFragranticaUrl.trim(),
         }),
       });
       setNewName("");
       setNewBrand("");
       setNewTags([]);
       setNewNotes("");
+      setNewFragranticaUrl("");
       await load();
     } finally {
       setAdding(false);
@@ -259,10 +345,151 @@ export default function Home() {
           Add a fragrance
         </h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Tags drive suggestions. Later you can wire{" "}
-          <strong className="font-normal text-[var(--text)]">Apify + Fragrantica</strong> to fill
-          notes automatically—this MVP is all manual.
+          Enter a bottle by hand, or pull structured data from Fragrantica using an{" "}
+          <a
+            href="https://apify.com/lexis-solutions/fragrantica"
+            className="underline decoration-[var(--border)] underline-offset-2 hover:text-[var(--accent)]"
+          >
+            Apify actor
+          </a>{" "}
+          (<code className="text-xs text-[var(--text)]">APIFY_TOKEN</code> in{" "}
+          <code className="text-xs text-[var(--text)]">.env</code>).
         </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAddSource("manual");
+              setFcError(null);
+            }}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+              addSource === "manual"
+                ? "bg-[var(--accent)] text-[var(--bg)]"
+                : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
+            }`}
+          >
+            Manual
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAddSource("fragrantica");
+              setFcError(null);
+            }}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+              addSource === "fragrantica"
+                ? "bg-[var(--accent)] text-[var(--bg)]"
+                : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
+            }`}
+          >
+            Fragrantica (Apify)
+          </button>
+        </div>
+
+        {addSource === "fragrantica" && (
+          <div className="mt-6 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg)]/40 p-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFcMode("url");
+                  setFcError(null);
+                  setFcResults([]);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-sm ${
+                  fcMode === "url"
+                    ? "bg-[var(--accent-soft)]/40 text-[var(--accent)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                Perfume URL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFcMode("search");
+                  setFcError(null);
+                  setFcResults([]);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-sm ${
+                  fcMode === "search"
+                    ? "bg-[var(--accent-soft)]/40 text-[var(--accent)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                Search
+              </button>
+            </div>
+
+            {fcMode === "url" ? (
+              <form onSubmit={(e) => void fetchFragranticaFromUrl(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="min-w-0 flex-1">
+                  <span className="mb-1 block text-xs text-[var(--muted)]">Fragrantica perfume page</span>
+                  <input
+                    value={fcUrl}
+                    onChange={(e) => setFcUrl(e.target.value)}
+                    placeholder="https://www.fragrantica.com/perfume/…"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={fcLoading}
+                  className="rounded-xl bg-[var(--accent)] px-5 py-3 font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50"
+                >
+                  {fcLoading ? "Fetching…" : "Fetch & fill form"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={(e) => void fetchFragranticaSearch(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="min-w-0 flex-1">
+                  <span className="mb-1 block text-xs text-[var(--muted)]">Search Fragrantica</span>
+                  <input
+                    value={fcQuery}
+                    onChange={(e) => setFcQuery(e.target.value)}
+                    placeholder="e.g. Sauvage Dior"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={fcLoading}
+                  className="rounded-xl bg-[var(--accent)] px-5 py-3 font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50"
+                >
+                  {fcLoading ? "Searching…" : "Search"}
+                </button>
+              </form>
+            )}
+
+            {fcError ? (
+              <p className="text-sm text-amber-200/90" role="alert">
+                {fcError}
+              </p>
+            ) : null}
+
+            {fcResults.length > 0 && (
+              <div>
+                <p className="mb-2 text-sm text-[var(--muted)]">Pick a result to fill the form:</p>
+                <ul className="max-h-60 space-y-2 overflow-y-auto">
+                  {fcResults.map((r, i) => (
+                    <li key={`${r.fragranticaUrl}-${i}`}>
+                      <button
+                        type="button"
+                        onClick={() => applyFragranticaPreview(r)}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-sm hover:border-[var(--accent)]"
+                      >
+                        <span className="font-medium text-[var(--text)]">{r.name}</span>
+                        <span className="text-[var(--muted)]"> · {r.brand}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         <form onSubmit={addFragrance} className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <input
@@ -305,10 +532,23 @@ export default function Home() {
           <textarea
             value={newNotes}
             onChange={(e) => setNewNotes(e.target.value)}
-            placeholder="Optional notes (batch code, concentration, …)"
-            rows={2}
+            placeholder="Notes (batch code, pyramid text from Fragrantica, …)"
+            rows={3}
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
           />
+          {newFragranticaUrl ? (
+            <p className="text-xs text-[var(--muted)]">
+              Linked:{" "}
+              <a
+                href={newFragranticaUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[var(--accent)] underline underline-offset-2"
+              >
+                Fragrantica
+              </a>
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={adding}
@@ -350,6 +590,16 @@ export default function Home() {
                     </div>
                   )}
                   {f.notes ? <p className="mt-1 text-sm text-[var(--muted)]">{f.notes}</p> : null}
+                  {f.fragranticaUrl ? (
+                    <a
+                      href={f.fragranticaUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs text-[var(--accent)] underline underline-offset-2"
+                    >
+                      View on Fragrantica
+                    </a>
+                  ) : null}
                 </div>
                 <button
                   type="button"

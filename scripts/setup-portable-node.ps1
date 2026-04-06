@@ -26,7 +26,7 @@ Write-Host "Fetching Node.js LTS release list..." -ForegroundColor Cyan
 $releases = Invoke-RestMethod -Uri "https://nodejs.org/dist/index.json" -UseBasicParsing
 
 $pick = $releases |
-  Where-Object { $_.lts -and ($_.files -contains "win-x64.zip") } |
+  Where-Object { $_.lts -and ($_.files -contains "win-x64-zip") } |
   ForEach-Object {
     $ver = $_.version -replace '^v', ''
     [pscustomobject]@{ Version = $_.version; SemVer = [version]$ver; Entry = $_ }
