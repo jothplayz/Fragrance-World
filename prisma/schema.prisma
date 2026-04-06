@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Fragrance {
+  id             String   @id @default(cuid())
+  name           String
+  brand          String
+  /// Mood tags used for weather matching: fresh, citrus, aquatic, floral, woody, amber, gourmand, spicy, green, musk
+  tags           String   @default("[]") // JSON array of strings (SQLite)
+  notes          String   @default("")
+  fragranticaUrl String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Single-row app settings (id = 1)
+model AppSettings {
+  id          Int     @id @default(1)
+  /// City name for geocoding, e.g. "Paris, France"
+  cityQuery   String  @default("")
+  latitude    Float?
+  longitude   Float?
+  displayName String  @default("")
+}
