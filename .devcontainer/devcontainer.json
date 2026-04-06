@@ -1,1 +1,11 @@
-੻†渢浡≥›䘢慲牧湡散圠牡牤扯≥ਬ†椢慭敧㨢∠捭⹲業牣獯景⹴潣⽭敤捶湯慴湩牥⽳慪慶捳楲瑰渭摯㩥〲戭潯睫牯≭ਬ†昢牯慷摲潐瑲≳›㍛〰崰ਬ†瀢獯䍴敲瑡䍥浯慭摮㨢∠灮⁭湩瑳污⁬☦渠硰瀠楲浳⁡敧敮慲整☠…琨獥⁴昭⸠湥⁶籼挠⁰湥⹶硥浡汰⁥攮癮 ☦渠硰瀠楲浳⁡扤瀠獵≨ਬ†挢獵潴業慺楴湯≳›੻††瘢捳摯≥›੻†††攢瑸湥楳湯≳›≛扤敡浵牥瘮捳摯ⵥ獥楬瑮Ⱒ∠牐獩慭瀮楲浳≡੝††੽†੽੽
+{
+  "name": "Fragrance Wardrobe",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bookworm",
+  "forwardPorts": [3000],
+  "postCreateCommand": "npm install && npx prisma generate && (test -f .env || cp env.example .env) && npx prisma db push",
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "Prisma.prisma"]
+    }
+  }
+}

@@ -1,0 +1,289 @@
+[
+  {
+    "name": "Sauvage",
+    "brand": "Dior",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Dior/Sauvage-31861.html",
+    "notes": "Fresh spicy; bergamot and pepper.",
+    "tags": ["fresh", "citrus", "woody", "spicy"]
+  },
+  {
+    "name": "Sauvage Elixir",
+    "brand": "Dior",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Dior/Sauvage-Elixir-68415.html",
+    "notes": "Spiced lavender and rich woods.",
+    "tags": ["spicy", "woody", "amber"]
+  },
+  {
+    "name": "Homme Intense",
+    "brand": "Dior",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Dior/Dior-Homme-Intense-13016.html",
+    "notes": "Iris, cocoa, leather-tinged woods.",
+    "tags": ["woody", "amber", "floral"]
+  },
+  {
+    "name": "Miss Dior",
+    "brand": "Dior",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Dior/Miss-Dior-9997.html",
+    "notes": "Classic floral chypre line.",
+    "tags": ["floral", "fresh"]
+  },
+  {
+    "name": "Bleu de Chanel Eau de Parfum",
+    "brand": "Chanel",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Chanel/Bleu-de-Chanel-Eau-de-Parfum-25967.html",
+    "notes": "Woody aromatic citrus.",
+    "tags": ["woody", "citrus", "fresh"]
+  },
+  {
+    "name": "Bleu de Chanel Parfum",
+    "brand": "Chanel",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Chanel/Bleu-de-Chanel-Parfum-49912.html",
+    "notes": "Denser woody sandalwood parfum.",
+    "tags": ["woody", "amber", "fresh"]
+  },
+  {
+    "name": "Allure Homme Sport Eau Extreme",
+    "brand": "Chanel",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Chanel/Allure-Homme-Sport-Eau-Extreme-14669.html",
+    "notes": "Mint, tonka, musky freshness.",
+    "tags": ["fresh", "citrus", "musk"]
+  },
+  {
+    "name": "Coco Mademoiselle",
+    "brand": "Chanel",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Chanel/Coco-Mademoiselle-611.html",
+    "notes": "Patchouli citrus floral.",
+    "tags": ["citrus", "floral", "woody"]
+  },
+  {
+    "name": "Terre d'Hermès Parfum",
+    "brand": "Hermès",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Hermes/Terre-d-Hermes-Parfum-8282.html",
+    "notes": "Flint, citrus, woody chypre.",
+    "tags": ["citrus", "woody", "spicy"]
+  },
+  {
+    "name": "Terre d'Hermès Eau Très Fraîche",
+    "brand": "Hermès",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Hermes/Terre-d-Hermes-Eau-Tres-Fraiche-24060.html",
+    "notes": "Geranium, citrus, airy woods.",
+    "tags": ["fresh", "citrus", "green"]
+  },
+  {
+    "name": "Terre d'Hermès Intense",
+    "brand": "Hermès",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Hermes/Terre-d-Hermes-Intense-102772.html",
+    "notes": "Pepper, bergamot, mineral woods.",
+    "tags": ["spicy", "woody", "citrus"]
+  },
+  {
+    "name": "Silver Mountain Water",
+    "brand": "Creed",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Creed/Silver-Mountain-Water-472.html",
+    "notes": "Tea, blackcurrant, musk.",
+    "tags": ["fresh", "green", "musk"]
+  },
+  {
+    "name": "Aventus for Her",
+    "brand": "Creed",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Creed/Aventus-for-Her-38497.html",
+    "notes": "Fruity rose chypre.",
+    "tags": ["gourmand", "floral", "woody"]
+  },
+  {
+    "name": "Absolu Aventus",
+    "brand": "Creed",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Creed/Absolu-Aventus-84112.html",
+    "notes": "Fruity woody amber.",
+    "tags": ["woody", "amber", "citrus"]
+  },
+  {
+    "name": "Spice and Wood",
+    "brand": "Creed",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Creed/Spice-and-Wood-10101.html",
+    "notes": "Apple, clove, cedar.",
+    "tags": ["spicy", "woody", "green"]
+  },
+  {
+    "name": "Versace Pour Homme",
+    "brand": "Versace",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Versace/Versace-Pour-Homme-2318.html",
+    "notes": "Neroli, citrus, clean musk.",
+    "tags": ["citrus", "fresh", "aquatic"]
+  },
+  {
+    "name": "Versace Man",
+    "brand": "Versace",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Versace/Versace-Man-643.html",
+    "notes": "Tobacco, neroli, amber.",
+    "tags": ["spicy", "woody", "amber"]
+  },
+  {
+    "name": "Eros",
+    "brand": "Versace",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Versace/Versace-Eros-16980.html",
+    "notes": "Mint, vanilla, tonka.",
+    "tags": ["fresh", "gourmand", "woody"]
+  },
+  {
+    "name": "L'Homme",
+    "brand": "Prada",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Prada/Prada-L-Homme-39029.html",
+    "notes": "Neroli, iris, clean woods.",
+    "tags": ["fresh", "floral", "woody"]
+  },
+  {
+    "name": "La Nuit de L'Homme Eau de Parfum (2026)",
+    "brand": "Yves Saint Laurent",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Yves-Saint-Laurent/La-Nuit-de-L-Homme-Eau-de-Parfum-2026-125843.html",
+    "notes": "Spicy oriental line; check Fragrantica for pyramid.",
+    "tags": ["spicy", "amber", "woody"]
+  },
+  {
+    "name": "Y Eau de Parfum",
+    "brand": "Yves Saint Laurent",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Yves-Saint-Laurent/Y-Eau-de-Parfum-47748.html",
+    "notes": "Apple, sage, amber woods.",
+    "tags": ["fresh", "woody", "amber"]
+  },
+  {
+    "name": "Black Opium",
+    "brand": "Yves Saint Laurent",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Yves-Saint-Laurent/Black-Opium-25324.html",
+    "notes": "Coffee, vanilla, white florals.",
+    "tags": ["gourmand", "floral", "spicy"]
+  },
+  {
+    "name": "Le Male Le Parfum",
+    "brand": "Jean Paul Gaultier",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Jean-Paul-Gaultier/Le-Male-Le-Parfum-62201.html",
+    "notes": "Cardamom, iris, vanilla.",
+    "tags": ["spicy", "gourmand", "fresh"]
+  },
+  {
+    "name": "Acqua di Giò",
+    "brand": "Giorgio Armani",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Giorgio-Armani/Acqua-di-Gio-410.html",
+    "notes": "Marine citrus classic.",
+    "tags": ["aquatic", "citrus", "fresh"]
+  },
+  {
+    "name": "Acqua di Giò Profondo",
+    "brand": "Giorgio Armani",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Giorgio-Armani/Acqua-di-Gio-Profondo-59353.html",
+    "notes": "Marine, patchouli, aromatic.",
+    "tags": ["aquatic", "woody", "fresh"]
+  },
+  {
+    "name": "Code",
+    "brand": "Giorgio Armani",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Giorgio-Armani/Armani-Code-555.html",
+    "notes": "Tonka, citrus, leather hint.",
+    "tags": ["spicy", "woody", "amber"]
+  },
+  {
+    "name": "The One",
+    "brand": "Dolce & Gabbana",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Dolce-Gabbana/The-One-for-Men-2059.html",
+    "notes": "Tobacco, amber, spice.",
+    "tags": ["amber", "spicy", "woody"]
+  },
+  {
+    "name": "Light Blue Pour Homme",
+    "brand": "Dolce & Gabbana",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Dolce-Gabbana/Light-Blue-Pour-Homme-295.html",
+    "notes": "Sicilian citrus, juniper.",
+    "tags": ["citrus", "fresh", "aquatic"]
+  },
+  {
+    "name": "1 Million",
+    "brand": "Paco Rabanne",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Paco-Rabanne/1-Million-3747.html",
+    "notes": "Blood mandarin, cinnamon, leather.",
+    "tags": ["spicy", "woody", "citrus"]
+  },
+  {
+    "name": "Invictus",
+    "brand": "Paco Rabanne",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Paco-Rabanne/Invictus-17728.html",
+    "notes": "Grapefruit, sea notes, bay leaf.",
+    "tags": ["fresh", "aquatic", "citrus"]
+  },
+  {
+    "name": "Gentleman Eau de Parfum",
+    "brand": "Givenchy",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Givenchy/Gentleman-2017-45180.html",
+    "notes": "Iris, vanilla, patchouli.",
+    "tags": ["woody", "floral", "spicy"]
+  },
+  {
+    "name": "La Vie Est Belle",
+    "brand": "Lancôme",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Lancome/La-Vie-Est-Belle-14983.html",
+    "notes": "Iris, praline, patchouli.",
+    "tags": ["gourmand", "floral", "woody"]
+  },
+  {
+    "name": "Flowerbomb",
+    "brand": "Viktor & Rolf",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Viktor-Rolf/Flowerbomb-1875.html",
+    "notes": "Sweet florals, patchouli.",
+    "tags": ["floral", "gourmand", "spicy"]
+  },
+  {
+    "name": "Angel",
+    "brand": "Mugler",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Mugler/Angel-704.html",
+    "notes": "Patchouli, caramel, cotton candy.",
+    "tags": ["gourmand", "woody", "amber"]
+  },
+  {
+    "name": "A Men",
+    "brand": "Mugler",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Mugler/A-Men-705.html",
+    "notes": "Coffee, patchouli, tar.",
+    "tags": ["gourmand", "woody", "spicy"]
+  },
+  {
+    "name": "Ombre Leather",
+    "brand": "Tom Ford",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Tom-Ford/Ombre-Leather-2018-49604.html",
+    "notes": "Leather, jasmine, moss.",
+    "tags": ["woody", "spicy", "floral"]
+  },
+  {
+    "name": "Tobacco Vanille",
+    "brand": "Tom Ford",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Tom-Ford/Tobacco-Vanille-1825.html",
+    "notes": "Tobacco, vanilla, tonka.",
+    "tags": ["gourmand", "spicy", "woody"]
+  },
+  {
+    "name": "Baccarat Rouge 540",
+    "brand": "Maison Francis Kurkdjian",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Maison-Francis-Kurkdjian/Baccarat-Rouge-540-33688.html",
+    "notes": "Saffron, amberwood, jasmine.",
+    "tags": ["amber", "floral", "woody"]
+  },
+  {
+    "name": "Layton",
+    "brand": "Parfums de Marly",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Parfums-de-Marly/Layton-40816.html",
+    "notes": "Apple, vanilla, woods.",
+    "tags": ["fresh", "woody", "gourmand"]
+  },
+  {
+    "name": "Herod",
+    "brand": "Parfums de Marly",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Parfums-de-Marly/Herod-15767.html",
+    "notes": "Cinnamon, tobacco, vanilla.",
+    "tags": ["spicy", "gourmand", "woody"]
+  },
+  {
+    "name": "Aventus",
+    "brand": "Creed",
+    "fragranticaUrl": "https://www.fragrantica.com/perfume/Creed/Aventus-9828.html",
+    "notes": "Pineapple, birch, musk (batch variation).",
+    "tags": ["citrus", "woody", "fresh"]
+  }
+]

@@ -1,0 +1,2 @@
+# Copy to catalog-urls.txt (one Fragrantica perfume URL per line), then: npm run catalog:import-urls
+# https://www.fragrantica.com/perfume/Dior/Sauvage-31861.html

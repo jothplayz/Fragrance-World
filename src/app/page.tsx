@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { TAG_OPTIONS, type FragranceTag } from "@/lib/tag-options";
+import { parseTagsFromJson, TAG_OPTIONS, type FragranceTag } from "@/lib/tag-options";
 
 type FragranceRow = {
   id: string;
@@ -43,18 +43,6 @@ type TodayPayload =
       collectionCount: number;
     }
   | { ok: false; reason: string; message?: string };
-
-function parseTags(json: string): FragranceTag[] {
-  try {
-    const a = JSON.parse(json) as unknown;
-    if (!Array.isArray(a)) return [];
-    return a.filter((t): t is FragranceTag =>
-      typeof t === "string" && (TAG_OPTIONS as readonly string[]).includes(t)
-    );
-  } catch {
-    return [];
-  }
-}
 
 export default function Home() {
   const [fragrances, setFragrances] = useState<FragranceRow[]>([]);
@@ -166,18 +154,15 @@ export default function Home() {
     }
   }
 
-  async function fetchFragranticaSearch(e: React.FormEvent) {
+  async function fetchCatalogSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!fcQuery.trim()) return;
     setFcLoading(true);
     setFcError(null);
     setFcResults([]);
     try {
-      const res = await fetch("/api/fragrances/fragrantica", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: fcQuery.trim() }),
-      });
+      const q = encodeURIComponent(fcQuery.trim());
+      const res = await fetch(`/api/fragrances/catalog?q=${q}`);
       const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
       if (!res.ok) {
         setFcError(typeof body.error === "string" ? body.error : "Search failed.");
@@ -185,7 +170,9 @@ export default function Home() {
       }
       const list = Array.isArray(body.results) ? body.results : [];
       if (list.length === 0) {
-        setFcError("No matches. Try another query.");
+        setFcError(
+          "No matches in the local catalog. Run npm run db:seed (or add rows to data/catalog.seed.json and seed again)."
+        );
         return;
       }
       setFcResults(list);
@@ -345,15 +332,10 @@ export default function Home() {
           Add a fragrance
         </h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Enter a bottle by hand, or pull structured data from Fragrantica using an{" "}
-          <a
-            href="https://apify.com/lexis-solutions/fragrantica"
-            className="underline decoration-[var(--border)] underline-offset-2 hover:text-[var(--accent)]"
-          >
-            Apify actor
-          </a>{" "}
-          (<code className="text-xs text-[var(--text)]">APIFY_TOKEN</code> in{" "}
-          <code className="text-xs text-[var(--text)]">.env</code>).
+          Search uses a <strong className="font-medium text-[var(--text)]">local catalog</strong> in your
+          SQLite database (seeded from <code className="text-xs">data/catalog.seed.json</code> via{" "}
+          <code className="text-xs">npm run db:seed</code>). Paste a Fragrantica perfume URL to fetch live
+          details with Apify if <code className="text-xs">APIFY_TOKEN</code> is set.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -383,7 +365,7 @@ export default function Home() {
                 : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
             }`}
           >
-            Fragrantica (Apify)
+            {"Catalog & Fragrantica"}
           </button>
         </div>
 
@@ -418,7 +400,7 @@ export default function Home() {
                     : "text-[var(--muted)] hover:text-[var(--text)]"
                 }`}
               >
-                Search
+                Local search
               </button>
             </div>
 
@@ -442,13 +424,13 @@ export default function Home() {
                 </button>
               </form>
             ) : (
-              <form onSubmit={(e) => void fetchFragranticaSearch(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <form onSubmit={(e) => void fetchCatalogSearch(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="min-w-0 flex-1">
-                  <span className="mb-1 block text-xs text-[var(--muted)]">Search Fragrantica</span>
+                  <span className="mb-1 block text-xs text-[var(--muted)]">Search local catalog</span>
                   <input
                     value={fcQuery}
                     onChange={(e) => setFcQuery(e.target.value)}
-                    placeholder="e.g. Sauvage Dior"
+                    placeholder="e.g. Sauvage, Chanel, Hermès"
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
                   />
                 </label>
@@ -568,7 +550,7 @@ export default function Home() {
         )}
         <ul className="mt-4 space-y-3">
           {fragrances.map((f) => {
-            const tags = parseTags(f.tags);
+            const tags = parseTagsFromJson(f.tags);
             return (
               <li
                 key={f.id}

@@ -10,8 +10,14 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
+    "catalog:import-urls": "npx tsx scripts/import-catalog-urls.ts",
+    "catalog:bulk-apify": "npx tsx scripts/bulk-catalog-apify.ts",
     "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
@@ -30,6 +36,7 @@
     "eslint-config-next": "^15.2.4",
     "prisma": "^6.5.0",
     "tailwindcss": "^4",
+    "tsx": "^4.19.3",
     "typescript": "5.9.3"
   }
 }

@@ -19,6 +19,21 @@ model Fragrance {
   updatedAt      DateTime @updatedAt
 }
 
+/// Reference perfumes for local search (seeded JSON + optional Apify URL import). Not the user collection.
+model FragranceCatalog {
+  id             String   @id @default(cuid())
+  name           String
+  brand          String
+  tags           String   @default("[]")
+  notes          String   @default("")
+  fragranticaUrl String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([name])
+  @@index([brand])
+}
+
 /// Single-row app settings (id = 1)
 model AppSettings {
   id          Int     @id @default(1)
