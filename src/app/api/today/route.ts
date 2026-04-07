@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
 import { humanVibeLabel, rankFragrances, vibesFromWeather } from "@/lib/suggestions";
 import { cToF, fetchTodayWeather } from "@/lib/weather";
 
@@ -32,7 +33,9 @@ export async function GET() {
 
     const vibes = vibesFromWeather(weather);
     const ranked = rankFragrances(fragrances, weather);
-    const top = ranked.slice(0, 3);
+    const best = ranked[0];
+    const pickImage =
+      best && (best.fragrance.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(best.fragrance.fragranticaUrl));
 
     return NextResponse.json({
       ok: true,
@@ -54,18 +57,32 @@ export async function GET() {
         keys: vibes,
         label: humanVibeLabel(vibes),
       },
-      suggestions: top.map((r) => ({
-        id: r.fragrance.id,
-        name: r.fragrance.name,
-        brand: r.fragrance.brand,
-        tags: r.tags,
-        score: r.score,
-        notes: r.fragrance.notes,
-      })),
+      pick: best
+        ? {
+            id: best.fragrance.id,
+            name: best.fragrance.name,
+            brand: best.fragrance.brand,
+            tags: best.tags,
+            score: best.score,
+            notes: best.fragrance.notes,
+            imageUrl: pickImage ?? "",
+            fragranticaUrl: best.fragrance.fragranticaUrl ?? "",
+          }
+        : null,
       collectionCount: fragrances.length,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Server error";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      {
+        ok: false,
+        reason: "server_error",
+        message:
+          message.includes("imageUrl") || message.includes("FragranceCatalog")
+            ? `${message} If you just pulled an update, run: npx prisma db push`
+            : message,
+      },
+      { status: 500 }
+    );
   }
 }

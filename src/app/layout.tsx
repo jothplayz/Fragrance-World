@@ -24,7 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${dmSans.variable} ${fraunces.variable} font-sans antialiased`}>
+      <body
+        className={`${dmSans.variable} ${fraunces.variable} min-h-screen font-[family-name:var(--font-dm-sans)] antialiased`}
+      >
         {children}
       </body>
     </html>

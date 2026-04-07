@@ -88,7 +88,7 @@ async function main() {
       startUrls,
       maxItems: startUrls.length,
       allReviews: false,
-      omitFields: ["reviews", "images"],
+      omitFields: ["reviews"],
       proxyConfiguration: { useApifyProxy: useProxy },
     },
     { waitSecs: 300 }
@@ -107,23 +107,25 @@ async function main() {
   let n = 0;
   for (const item of items as Record<string, unknown>[]) {
     const p = mapFragranticaItem(item);
-    if (!p.fragranticaUrl) continue;
-    await prisma.fragranceCatalog.upsert({
-      where: { fragranticaUrl: p.fragranticaUrl },
-      create: {
-        name: p.name,
-        brand: p.brand,
-        notes: p.notes,
-        tags: normalizeTags(p.tags),
-        fragranticaUrl: p.fragranticaUrl,
-      },
-      update: {
-        name: p.name,
-        brand: p.brand,
-        notes: p.notes,
-        tags: normalizeTags(p.tags),
-      },
-    });
+        if (!p.fragranticaUrl) continue;
+        await prisma.fragranceCatalog.upsert({
+          where: { fragranticaUrl: p.fragranticaUrl },
+          create: {
+            name: p.name,
+            brand: p.brand,
+            notes: p.notes,
+            tags: normalizeTags(p.tags),
+            fragranticaUrl: p.fragranticaUrl,
+            imageUrl: p.imageUrl ?? "",
+          },
+          update: {
+            name: p.name,
+            brand: p.brand,
+            notes: p.notes,
+            tags: normalizeTags(p.tags),
+            imageUrl: p.imageUrl ?? "",
+          },
+        });
     n += 1;
   }
 

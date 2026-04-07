@@ -14,6 +14,7 @@
     "db:studio": "prisma studio",
     "catalog:import-urls": "npx tsx scripts/import-catalog-urls.ts",
     "catalog:bulk-apify": "npx tsx scripts/bulk-catalog-apify.ts",
+    "catalog:import-dataset": "npx tsx scripts/import-apify-dataset.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

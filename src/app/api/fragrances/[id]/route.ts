@@ -23,6 +23,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     tags?: unknown;
     notes?: string;
     fragranticaUrl?: string;
+    imageUrl?: string;
   }>(request);
   if (!parsed.ok) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
@@ -43,6 +44,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
         ...(body.tags !== undefined ? { tags: normalizeTags(body.tags) } : {}),
         ...(typeof body.notes === "string" ? { notes: body.notes } : {}),
         ...(typeof body.fragranticaUrl === "string" ? { fragranticaUrl: body.fragranticaUrl.trim() } : {}),
+        ...(typeof body.imageUrl === "string" ? { imageUrl: body.imageUrl.trim() } : {}),
       },
     });
     return NextResponse.json(row);

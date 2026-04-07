@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import type { FragranticaPreview } from "@/lib/apify-fragrantica";
+import { imageUrlFromFragranticaPerfumeUrl, type FragranticaPreview } from "@/lib/apify-fragrantica";
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
 
@@ -13,13 +13,17 @@ function toPreview(row: {
   notes: string;
   tags: string;
   fragranticaUrl: string;
+  imageUrl: string;
 }): FragranticaPreview {
+  const stored = row.imageUrl?.trim() ?? "";
+  const imageUrl = stored || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl);
   return {
     name: row.name,
     brand: row.brand,
     notes: row.notes,
     tags: parseTagsFromJson(row.tags),
     fragranticaUrl: row.fragranticaUrl,
+    imageUrl,
   };
 }
 
@@ -44,9 +48,10 @@ export async function GET(request: Request) {
         tags: string;
         notes: string;
         fragranticaUrl: string;
+        imageUrl: string;
       }>
     >(Prisma.sql`
-      SELECT "id", "name", "brand", "tags", "notes", "fragranticaUrl"
+      SELECT "id", "name", "brand", "tags", "notes", "fragranticaUrl", "imageUrl"
       FROM "FragranceCatalog"
       WHERE "name" LIKE ${pattern} COLLATE NOCASE
          OR "brand" LIKE ${pattern} COLLATE NOCASE

@@ -1,7 +1,63 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { safeImageSrc } from "@/lib/safe-image-src";
 import { parseTagsFromJson, TAG_OPTIONS, type FragranceTag } from "@/lib/tag-options";
+
+/** Portrait 3:4 slots like Fragrantica product cards: transparent fill, contain-fit bottle, soft inset hairline. */
+function BottleThumb({
+  src,
+  label,
+  size = "md",
+}: {
+  src: string;
+  label: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const widthClass =
+    size === "sm" ? "w-11 sm:w-12" : size === "lg" ? "w-[9rem] sm:w-44" : "w-[4.5rem] sm:w-[5.25rem]";
+  const sizesAttr = size === "sm" ? "48px" : size === "lg" ? "(max-width:640px) 144px, 176px" : "84px";
+  const safeSrc = safeImageSrc(src);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [safeSrc]);
+
+  if (!safeSrc || imgFailed) {
+    return (
+      <div
+        className={`relative flex aspect-[3/4] shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--text)_9%,transparent)] ${widthClass}`}
+        aria-hidden
+      >
+        <span className="text-sm font-medium text-[var(--muted)]/75 sm:text-base">
+          {label.trim().slice(0, 1).toUpperCase() || "?"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`relative aspect-[3/4] shrink-0 overflow-hidden rounded-2xl bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--text)_9%,transparent)] ${widthClass}`}
+    >
+      <div className="absolute inset-2 sm:inset-2.5">
+        <div className="relative h-full w-full">
+          <Image
+            src={safeSrc}
+            alt={`${label} bottle`}
+            fill
+            sizes={sizesAttr}
+            className="object-contain object-center [filter:drop-shadow(0_10px_22px_rgb(0_0_0/0.42))]"
+            priority={size === "lg"}
+            onError={() => setImgFailed(true)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type FragranceRow = {
   id: string;
@@ -10,6 +66,7 @@ type FragranceRow = {
   tags: string;
   notes: string;
   fragranticaUrl: string;
+  imageUrl?: string;
 };
 
 type FragranticaPreview = {
@@ -18,6 +75,7 @@ type FragranticaPreview = {
   notes: string;
   tags: FragranceTag[];
   fragranticaUrl: string;
+  imageUrl?: string;
 };
 
 type TodayPayload =
@@ -33,13 +91,16 @@ type TodayPayload =
         precipProbMax: number;
       };
       vibe: { label: string };
-      suggestions: Array<{
+      pick: {
         id: string;
         name: string;
         brand: string;
         tags: FragranceTag[];
         score: number;
-      }>;
+        notes?: string;
+        imageUrl: string;
+        fragranticaUrl: string;
+      } | null;
       collectionCount: number;
     }
   | { ok: false; reason: string; message?: string };
@@ -58,6 +119,7 @@ export default function Home() {
   const [newTags, setNewTags] = useState<FragranceTag[]>([]);
   const [newNotes, setNewNotes] = useState("");
   const [newFragranticaUrl, setNewFragranticaUrl] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
   const [adding, setAdding] = useState(false);
 
   const [addSource, setAddSource] = useState<"manual" | "fragrantica">("manual");
@@ -67,22 +129,39 @@ export default function Home() {
   const [fcLoading, setFcLoading] = useState(false);
   const [fcError, setFcError] = useState<string | null>(null);
   const [fcResults, setFcResults] = useState<FragranticaPreview[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [fRes, sRes, tRes] = await Promise.all([
         fetch("/api/fragrances"),
         fetch("/api/settings"),
         fetch("/api/today"),
       ]);
-      const fJson = (await fRes.json()) as FragranceRow[];
-      const sJson = (await sRes.json()) as { cityQuery: string; displayName: string };
+      const fJson = (await fRes.json()) as unknown;
+      const sJson = (await sRes.json()) as { cityQuery?: string; displayName?: string };
       const tJson = (await tRes.json()) as TodayPayload;
-      setFragrances(Array.isArray(fJson) ? fJson : []);
-      setCityQuery(sJson.cityQuery ?? "");
-      setSavedCity(sJson.displayName || sJson.cityQuery || "");
-      setToday(tJson);
+      setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
+      setCityQuery(typeof sJson.cityQuery === "string" ? sJson.cityQuery : "");
+      setSavedCity(
+        (typeof sJson.displayName === "string" ? sJson.displayName : "") ||
+          (typeof sJson.cityQuery === "string" ? sJson.cityQuery : "")
+      );
+      if (tJson && typeof tJson === "object" && "ok" in tJson) {
+        setToday(tJson);
+      } else {
+        setToday({ ok: false, reason: "server_error", message: "Unexpected response from /api/today." });
+      }
+      if (!fRes.ok && !Array.isArray(fJson)) {
+        const err = fJson as { error?: string };
+        setLoadError(typeof err.error === "string" ? err.error : "Could not load your collection.");
+      }
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Network error while loading.");
+      setToday({ ok: false, reason: "server_error", message: "Could not reach the server." });
     } finally {
       setLoading(false);
     }
@@ -121,6 +200,7 @@ export default function Home() {
     setNewNotes(p.notes);
     setNewTags(p.tags);
     setNewFragranticaUrl(p.fragranticaUrl);
+    setNewImageUrl(p.imageUrl?.trim() ?? "");
     setFcResults([]);
     setFcError(null);
     setAddSource("manual");
@@ -138,17 +218,33 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: fcUrl.trim() }),
       });
-      const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+      let body: { results?: FragranticaPreview[]; error?: string };
+      try {
+        body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+      } catch {
+        setFcError(`Bad response (${res.status}). Is the dev server running?`);
+        return;
+      }
       if (!res.ok) {
-        setFcError(typeof body.error === "string" ? body.error : "Could not fetch from Apify.");
+        const hint =
+          res.status === 503
+            ? " Set APIFY_TOKEN in .env in the project folder and restart npm run dev."
+            : res.status === 502
+              ? " Apify run failed—check your token/credits. URL import retries once with Apify proxy by default; you can also set APIFY_USE_PROXY=true."
+              : "";
+        setFcError((typeof body.error === "string" ? body.error : "Could not fetch from Apify.") + hint);
         return;
       }
       const list = Array.isArray(body.results) ? body.results : [];
       if (list.length === 0) {
-        setFcError("No perfume data returned. Check the URL or try search.");
+        setFcError(
+          "No perfume data returned. Use a full perfume URL (…/perfume/Brand/Name-12345.html), check APIFY_TOKEN, or try local catalog search."
+        );
         return;
       }
       applyFragranticaPreview(list[0]!);
+    } catch {
+      setFcError("Network error while contacting the server.");
     } finally {
       setFcLoading(false);
     }
@@ -185,8 +281,9 @@ export default function Home() {
     e.preventDefault();
     if (!newName.trim() || !newBrand.trim()) return;
     setAdding(true);
+    setAddError(null);
     try {
-      await fetch("/api/fragrances", {
+      const res = await fetch("/api/fragrances", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -195,14 +292,23 @@ export default function Home() {
           tags: newTags,
           notes: newNotes,
           fragranticaUrl: newFragranticaUrl.trim(),
+          imageUrl: newImageUrl.trim(),
         }),
       });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setAddError(typeof body.error === "string" ? body.error : "Could not add fragrance.");
+        return;
+      }
       setNewName("");
       setNewBrand("");
       setNewTags([]);
       setNewNotes("");
       setNewFragranticaUrl("");
+      setNewImageUrl("");
       await load();
+    } catch {
+      setAddError("Network error. Try again.");
     } finally {
       setAdding(false);
     }
@@ -218,16 +324,41 @@ export default function Home() {
   }
 
   return (
-    <div className="relative z-10 mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      <header className="mb-12 border-b border-[var(--border)] pb-8">
+    <main className="relative z-10 mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      {loadError ? (
+        <div
+          className="mb-8 flex flex-col gap-3 rounded-xl border border-amber-500/40 bg-amber-950/25 px-4 py-3 text-sm text-amber-100/95 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+        >
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="shrink-0 rounded-lg bg-amber-200/15 px-3 py-1.5 font-medium text-amber-100 hover:bg-amber-200/25"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+      <header className="mb-12 flex flex-col gap-4 border-b border-[var(--border)] pb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div>
         <p className="text-sm tracking-wide text-[var(--muted)]">Personal scent log</p>
         <h1 className="font-[family-name:var(--font-fraunces)] text-4xl font-medium tracking-tight text-[var(--text)] sm:text-5xl">
           Fragrance Wardrobe
         </h1>
         <p className="mt-3 max-w-xl text-[var(--muted)]">
-          Add what you own, tag the mood, set your city. Each day we match your collection to the
-          forecast—no accounts, just your machine for now.
+          Add what you own, tag the mood, set your city. Each day we pick one bottle from your collection that
+          fits the forecast—no accounts, just your machine for now.
         </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="self-start rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)] disabled:opacity-50 sm:self-auto"
+        >
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
       </header>
 
       <section className="mb-10 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg shadow-black/20">
@@ -241,6 +372,11 @@ export default function Home() {
         {!loading && today?.ok === false && today.reason === "weather_error" && (
           <p className="mt-4 text-amber-200/90">{today.message}</p>
         )}
+        {!loading && today?.ok === false && today.reason === "server_error" && (
+          <p className="mt-4 text-amber-200/90" role="alert">
+            {today.message ?? "Could not load today."}
+          </p>
+        )}
         {!loading && today?.ok === true && (
           <div className="mt-4 space-y-4">
             <p className="text-[var(--muted)]">
@@ -250,37 +386,51 @@ export default function Home() {
               {today.weather.tempMinF}°F · rain chance {today.weather.precipProbMax}%
             </p>
             <p className="text-lg text-[var(--text)]">
-              For a <em className="not-italic text-[var(--accent)]">{today.vibe.label}</em>, consider:
+              On a <em className="not-italic text-[var(--accent)]">{today.vibe.label}</em>, your best fit is:
             </p>
             {today.collectionCount === 0 && (
-              <p className="text-[var(--muted)]">Add a fragrance below to get picks.</p>
+              <p className="text-[var(--muted)]">Add a fragrance below to get a daily pick.</p>
             )}
-            {today.collectionCount > 0 && today.suggestions.length === 0 && (
-              <p className="text-[var(--muted)]">Add mood tags to your bottles for better matches.</p>
+            {today.collectionCount > 0 && !today.pick && (
+              <p className="text-[var(--muted)]">Could not pick a bottle—try refreshing or re-saving your city.</p>
             )}
-            <ul className="space-y-3">
-              {today.suggestions.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)]/60 px-4 py-3"
-                >
-                  <div>
-                    <span className="font-medium text-[var(--text)]">{s.name}</span>
-                    <span className="text-[var(--muted)]"> · {s.brand}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {s.tags.map((t) => (
-                      <span
-                        key={t}
-                        className="rounded-full bg-[var(--accent-soft)]/30 px-2 py-0.5 text-xs text-[var(--accent)]"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {today.collectionCount > 0 && today.pick && (
+              <div className="flex flex-col items-center gap-5 rounded-2xl border border-[var(--border)]/70 bg-transparent p-5 sm:flex-row sm:items-center sm:gap-8">
+                <BottleThumb src={today.pick.imageUrl} label={today.pick.name} size="lg" />
+                <div className="min-w-0 flex-1 text-center sm:text-left">
+                  <p className="text-xl font-medium text-[var(--text)]">
+                    {today.pick.name}
+                    <span className="font-normal text-[var(--muted)]"> · {today.pick.brand}</span>
+                  </p>
+                  {today.pick.tags.length === 0 ? (
+                    <p className="mt-2 text-sm text-[var(--muted)]">
+                      Add mood tags to this bottle for sharper matching next time.
+                    </p>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {today.pick.tags.map((t) => (
+                        <span
+                          key={t}
+                          className="rounded-full bg-[var(--accent-soft)]/30 px-2 py-0.5 text-xs text-[var(--accent)]"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {today.pick.fragranticaUrl ? (
+                    <a
+                      href={today.pick.fragranticaUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-block text-sm text-[var(--accent)] underline underline-offset-2"
+                    >
+                      Open on Fragrantica
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -459,10 +609,13 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={() => applyFragranticaPreview(r)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-sm hover:border-[var(--accent)]"
+                        className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/40 px-3 py-2.5 text-left text-sm backdrop-blur-[2px] hover:border-[var(--accent)]/80"
                       >
-                        <span className="font-medium text-[var(--text)]">{r.name}</span>
-                        <span className="text-[var(--muted)]"> · {r.brand}</span>
+                        <BottleThumb src={r.imageUrl ?? ""} label={r.name} size="sm" />
+                        <span>
+                          <span className="font-medium text-[var(--text)]">{r.name}</span>
+                          <span className="text-[var(--muted)]"> · {r.brand}</span>
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -473,6 +626,12 @@ export default function Home() {
         )}
 
         <form onSubmit={addFragrance} className="mt-4 space-y-4">
+          {newImageUrl.trim() ? (
+            <div className="flex items-center gap-4 rounded-2xl border border-[var(--border)]/60 bg-transparent p-3">
+              <BottleThumb src={newImageUrl} label={newName || "Preview"} size="md" />
+              <p className="text-xs text-[var(--muted)]">Saved with the bottle.</p>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               required
@@ -531,6 +690,11 @@ export default function Home() {
               </a>
             </p>
           ) : null}
+          {addError ? (
+            <p className="text-sm text-amber-200/90" role="alert">
+              {addError}
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={adding}
@@ -554,9 +718,11 @@ export default function Home() {
             return (
               <li
                 key={f.id}
-                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-xl border border-[var(--border)]/70 bg-transparent px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div>
+                <div className="flex min-w-0 flex-1 gap-3">
+                  <BottleThumb src={f.imageUrl ?? ""} label={f.name} size="md" />
+                  <div className="min-w-0">
                   <span className="font-medium">{f.name}</span>
                   <span className="text-[var(--muted)]"> · {f.brand}</span>
                   {tags.length > 0 && (
@@ -582,6 +748,7 @@ export default function Home() {
                       View on Fragrantica
                     </a>
                   ) : null}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -595,6 +762,6 @@ export default function Home() {
           })}
         </ul>
       </section>
-    </div>
+    </main>
   );
 }

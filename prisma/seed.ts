@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { imageUrlFromFragranticaPerfumeUrl } from "../src/lib/apify-fragrantica";
 import { TAG_OPTIONS } from "../src/lib/tag-options";
 
 type SeedRow = {
@@ -9,6 +10,7 @@ type SeedRow = {
   fragranticaUrl: string;
   notes?: string;
   tags?: unknown;
+  imageUrl?: string;
 };
 
 function normalizeTags(input: unknown): string {
@@ -33,6 +35,8 @@ async function main() {
     const fragranticaUrl = typeof row.fragranticaUrl === "string" ? row.fragranticaUrl.trim() : "";
     if (!name || !brand || !fragranticaUrl) continue;
     const notes = typeof row.notes === "string" ? row.notes.trim() : "";
+    const explicitImg = typeof row.imageUrl === "string" ? row.imageUrl.trim() : "";
+    const imageUrl = explicitImg || imageUrlFromFragranticaPerfumeUrl(fragranticaUrl);
     await prisma.fragranceCatalog.upsert({
       where: { fragranticaUrl },
       create: {
@@ -41,8 +45,9 @@ async function main() {
         notes,
         tags: normalizeTags(row.tags),
         fragranticaUrl,
+        imageUrl,
       },
-      update: { name, brand, notes, tags: normalizeTags(row.tags) },
+      update: { name, brand, notes, tags: normalizeTags(row.tags), imageUrl },
     });
     n += 1;
   }
