@@ -138,6 +138,20 @@ export function perfumeIdFromFragranticaPath(pathname: string): string | null {
   return m ? m[1]! : null;
 }
 
+/**
+ * True if the URL's last path segment ends with -{pid} (.htm/.html optional).
+ * Avoids naive includes() so …-31861 matches pid 31861 but not 3186, and pid 1 does not match …-21.
+ */
+export function perfumeUrlMatchesId(fragranticaUrl: string, pid: string): boolean {
+  if (!pid || !/^\d+$/.test(pid) || !fragranticaUrl.trim()) return false;
+  try {
+    const pathname = new URL(fragranticaUrl.trim()).pathname;
+    return new RegExp(`[^/]-${pid}(?:\\.html?)?/?$`, "i").test(pathname);
+  } catch {
+    return new RegExp(`[^/]-${pid}(?:\\.html?)?(?:[#?]|$)`, "i").test(fragranticaUrl.trim());
+  }
+}
+
 /** Build a search string from a perfume path for Apify query fallback. */
 export function searchQueryFromPerfumePath(pathname: string): string | null {
   const segs = pathname.split("/").filter(Boolean);

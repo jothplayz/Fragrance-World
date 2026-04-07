@@ -5,6 +5,7 @@ import {
   mapFragranticaItem,
   normalizeFragranticaUrl,
   perfumeIdFromFragranticaPath,
+  perfumeUrlMatchesId,
   searchQueryFromPerfumePath,
   type FragranticaPreview,
 } from "@/lib/apify-fragrantica";
@@ -154,9 +155,7 @@ export async function POST(request: Request) {
       let results = mapped.filter((r) => r.fragranticaUrl);
 
       if (results.length > 0 && pid) {
-        const hit = results.find(
-          (r) => r.fragranticaUrl.includes(`-${pid}.`) || r.fragranticaUrl.includes(`-${pid}?`)
-        );
+        const hit = results.find((r) => perfumeUrlMatchesId(r.fragranticaUrl, pid));
         results = hit ? [hit] : [results[0]!];
       } else if (results.length > 1) {
         results = [results[0]!];
@@ -175,9 +174,7 @@ export async function POST(request: Request) {
           );
           const fromQuery = fromMapped.filter((r) => r.fragranticaUrl);
           if (pid) {
-            const hit = fromQuery.find(
-              (r) => r.fragranticaUrl.includes(`-${pid}.`) || r.fragranticaUrl.includes(`-${pid}?`)
-            );
+            const hit = fromQuery.find((r) => perfumeUrlMatchesId(r.fragranticaUrl, pid));
             results = hit ? [hit] : fromQuery.slice(0, 1);
           } else {
             results = fromQuery.slice(0, 1);
@@ -192,10 +189,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Search query is too short." }, { status: 400 });
     }
 
-    const results = await runFragranticaActor({
+    const mapped = await runFragranticaActor({
       query: queryRaw,
       maxItems: 8,
     });
+    const results = mapped.filter((r) => r.fragranticaUrl.trim());
 
     return NextResponse.json({ results, actorId: getActorId() });
   } catch (e) {
