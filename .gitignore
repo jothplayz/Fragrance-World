@@ -46,6 +46,8 @@ next-env.d.ts
 # prisma
 prisma/*.db
 prisma/*.db-journal
+# Team DB lives at repo root data/shared.db only — not under prisma/data/
+prisma/data/
 
 # local-only sqlite at repo root (DATABASE_URL=file:../dev.db — path is relative to prisma/)
 dev.db
