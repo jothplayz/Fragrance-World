@@ -46,3 +46,9 @@ next-env.d.ts
 # prisma
 prisma/*.db
 prisma/*.db-journal
+
+# local-only sqlite at repo root (DATABASE_URL=file:../dev.db — path is relative to prisma/)
+dev.db
+dev.db-journal
+
+# data/shared.db is the committed team database (see env.example)
