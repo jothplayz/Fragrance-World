@@ -26,6 +26,7 @@ type FragranticaPreview = {
   notes: string;
   tags: FragranceTag[];
   seasons: Season[];
+  occasions: Occasion[];
   fragranticaUrl: string;
   imageUrl?: string;
 };
@@ -80,13 +81,14 @@ export default function Home() {
   const [newImageUrl, setNewImageUrl] = useState("");
   const [adding, setAdding] = useState(false);
 
-  const [addSource, setAddSource] = useState<"manual" | "fragrantica">("manual");
-  const [fcMode, setFcMode] = useState<"url" | "search">("url");
-  const [fcUrl, setFcUrl] = useState("");
   const [fcQuery, setFcQuery] = useState("");
   const [fcLoading, setFcLoading] = useState(false);
   const [fcError, setFcError] = useState<string | null>(null);
   const [fcResults, setFcResults] = useState<FragranticaPreview[]>([]);
+  const [fcSearchSource, setFcSearchSource] = useState<"local" | "fragrantica" | null>(null);
+  const [fcEnriching, setFcEnriching] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [showCityModal, setShowCityModal] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -138,18 +140,6 @@ export default function Home() {
   }, [load]);
 
   useEffect(() => {
-    if (addSource !== "fragrantica" || fcMode !== "search") {
-      catalogAbortRef.current?.abort();
-      if (catalogDebounceRef.current) {
-        clearTimeout(catalogDebounceRef.current);
-        catalogDebounceRef.current = null;
-      }
-      setFcResults([]);
-      setFcLoading(false);
-      setFcError(null);
-      return;
-    }
-
     const q = fcQuery.trim();
     if (q.length < 1) {
       catalogAbortRef.current?.abort();
@@ -172,12 +162,17 @@ export default function Home() {
       catalogAbortRef.current = ac;
       setFcLoading(true);
       setFcError(null);
+      setFcSearchSource(null);
       void (async () => {
         try {
-          const res = await fetch(`/api/fragrances/catalog?q=${encodeURIComponent(q)}`, {
+          const res = await fetch(`/api/fragrances/search?q=${encodeURIComponent(q)}`, {
             signal: ac.signal,
           });
-          const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+          const body = (await res.json()) as {
+            results?: FragranticaPreview[];
+            source?: "local" | "fragrantica";
+            error?: string;
+          };
           if (ac.signal.aborted) return;
           if (!res.ok) {
             setFcError(typeof body.error === "string" ? body.error : "Search failed.");
@@ -186,6 +181,7 @@ export default function Home() {
           }
           const list = Array.isArray(body.results) ? body.results : [];
           setFcResults(list);
+          setFcSearchSource(body.source ?? null);
           setFcError(null);
         } catch (e) {
           if (e instanceof Error && e.name === "AbortError") return;
@@ -204,7 +200,7 @@ export default function Home() {
         catalogDebounceRef.current = null;
       }
     };
-  }, [fcQuery, fcMode, addSource]);
+  }, [fcQuery]);
 
   async function saveCity(e: React.FormEvent) {
     e.preventDefault();
@@ -235,85 +231,35 @@ export default function Home() {
     setNewNotes(p.notes);
     setNewTags(p.tags);
     setNewSeasons(p.seasons ?? []);
+    setNewOccasions(p.occasions ?? []);
     setNewFragranticaUrl(p.fragranticaUrl);
     setNewImageUrl(p.imageUrl?.trim() ?? "");
     setFcResults([]);
+    setFcSearchSource(null);
     setFcError(null);
-    setAddSource("manual");
-  }
+    setShowModal(true);
 
-  async function fetchFragranticaFromUrl(e: React.FormEvent) {
-    e.preventDefault();
-    if (!fcUrl.trim()) return;
-    setFcLoading(true);
-    setFcError(null);
-    setFcResults([]);
-    try {
-      const res = await fetch("/api/fragrances/fragrantica", {
+    // If this is a sparse search result (no notes/tags yet), fetch full details in background
+    if (!p.notes && p.fragranticaUrl) {
+      setFcEnriching(true);
+      void fetch("/api/fragrances/fragrantica", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: fcUrl.trim() }),
-      });
-      let body: { results?: FragranticaPreview[]; error?: string };
-      try {
-        body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
-      } catch {
-        setFcError(`Bad response (${res.status}). Is the dev server running?`);
-        return;
-      }
-      if (!res.ok) {
-        setFcError(typeof body.error === "string" ? body.error : "Could not fetch fragrance data.");
-        return;
-      }
-      const list = Array.isArray(body.results) ? body.results : [];
-      if (list.length === 0) {
-        setFcError("No perfume data returned. Make sure it's a full perfume URL like …/perfume/Brand/Name-12345.html");
-        return;
-      }
-      applyFragranticaPreview(list[0]!);
-    } catch {
-      setFcError("Network error while contacting the server.");
-    } finally {
-      setFcLoading(false);
-    }
-  }
-
-  async function fetchCatalogSearch(e: React.FormEvent) {
-    e.preventDefault();
-    const q = fcQuery.trim();
-    if (!q) return;
-    if (catalogDebounceRef.current) {
-      clearTimeout(catalogDebounceRef.current);
-      catalogDebounceRef.current = null;
-    }
-    catalogAbortRef.current?.abort();
-    const ac = new AbortController();
-    catalogAbortRef.current = ac;
-    setFcLoading(true);
-    setFcError(null);
-    try {
-      const res = await fetch(`/api/fragrances/catalog?q=${encodeURIComponent(q)}`, { signal: ac.signal });
-      const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
-      if (ac.signal.aborted) return;
-      if (!res.ok) {
-        setFcError(typeof body.error === "string" ? body.error : "Search failed.");
-        setFcResults([]);
-        return;
-      }
-      const list = Array.isArray(body.results) ? body.results : [];
-      setFcResults(list);
-      setFcError(null);
-      if (list.length === 0) {
-        setFcError(
-          "No matches in the local catalog. Run npm run db:seed (or add rows to data/catalog.seed.json and seed again)."
-        );
-      }
-    } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") return;
-      setFcError("Network error.");
-      setFcResults([]);
-    } finally {
-      if (!ac.signal.aborted) setFcLoading(false);
+        body: JSON.stringify({ url: p.fragranticaUrl }),
+      })
+        .then((r) => r.json())
+        .then((body: { results?: FragranticaPreview[] }) => {
+          const full = body.results?.[0];
+          if (full) {
+            setNewNotes(full.notes);
+            setNewTags(full.tags);
+            setNewSeasons(full.seasons ?? []);
+            setNewOccasions(full.occasions ?? []);
+            if (full.imageUrl) setNewImageUrl(full.imageUrl);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setFcEnriching(false));
     }
   }
 
@@ -350,6 +296,7 @@ export default function Home() {
       setNewNotes("");
       setNewFragranticaUrl("");
       setNewImageUrl("");
+      setShowModal(false);
       await load(todayOccasion);
     } catch {
       setAddError("Network error. Try again.");
@@ -394,500 +341,275 @@ export default function Home() {
     setNewOccasions((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
   }
 
+  const Spinner = () => (
+    <svg className="h-4 w-4 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  );
+
   return (
-    <main className="relative z-10 mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      {loadError ? (
-        <div
-          className="mb-8 flex flex-col gap-3 rounded-xl border border-amber-500/40 bg-amber-950/25 px-4 py-3 text-sm text-amber-100/95 sm:flex-row sm:items-center sm:justify-between"
-          role="alert"
-        >
-          <span>{loadError}</span>
-          <button
-            type="button"
-            onClick={() => void load(todayOccasion)}
-            className="shrink-0 rounded-lg bg-amber-200/15 px-3 py-1.5 font-medium text-amber-100 hover:bg-amber-200/25"
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
-      <header className="mb-12 flex flex-col gap-4 border-b border-[var(--border)] pb-8 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-        <p className="text-sm tracking-wide text-[var(--muted)]">
-          Personal scent log ·{" "}
-          <a
-            href="#collection"
-            className="text-[var(--accent)] underline decoration-[var(--border)] underline-offset-4 hover:decoration-[var(--accent)]"
-          >
-            Collection
-          </a>
-        </p>
-        <h1 className="mt-3 font-[family-name:var(--font-fraunces)] text-4xl font-medium tracking-tight text-[var(--text)] sm:text-5xl">
-          Fragrance Wardrobe
-        </h1>
-        <p className="mt-3 max-w-xl text-[var(--muted)]">
-          Add what you own, tag the mood, set your city. Each day we pick one bottle from your collection that
-          fits the forecast—no accounts, just your machine for now.
-        </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load(todayOccasion)}
-          disabled={loading}
-          className="self-start rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)] disabled:opacity-50 sm:self-auto"
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-      </header>
+    <div className="relative z-10 flex min-h-screen flex-col lg:h-screen lg:flex-row lg:overflow-hidden">
 
-      <section className="mb-10 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg shadow-black/20">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--accent)]">Today</h2>
-        </div>
+      {/* ══ LEFT HALF — two equal quarters stacked ══ */}
+      <div className="flex flex-col border-b border-[var(--border)] lg:w-1/2 lg:border-b-0 lg:border-r lg:overflow-hidden">
 
-        {/* Occasion picker */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {OCCASION_OPTIONS.map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => void selectOccasion(todayOccasion === o ? null : o)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                todayOccasion === o
-                  ? "bg-[var(--accent)] text-[var(--bg)]"
-                  : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
-              }`}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
+        {/* ── TOP QUARTER: Today ── */}
+        <section className="flex flex-1 flex-col overflow-hidden border-b border-[var(--border)] p-5 lg:p-6">
+          {/* Section header */}
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
+            <div>
+              <h1 className="font-[family-name:var(--font-fraunces)] text-lg font-medium text-[var(--text)]">
+                Fragrance Wardrobe
+              </h1>
+              <h2 className="text-xs text-[var(--accent)]">Today&apos;s pick</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setShowCityModal(true)}
+                title={`City: ${savedCity || "not set"}`}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
+                {savedCity ? `📍 ${savedCity}` : "📍 Set city"}
+              </button>
+              <button type="button" onClick={() => void load(todayOccasion)} disabled={loading}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)] disabled:opacity-50">
+                {loading ? "…" : "↻"}
+              </button>
+            </div>
+          </div>
 
-        {loading && <p className="mt-4 text-[var(--muted)]">Loading…</p>}
-        {!loading && today?.ok === false && today.reason === "no_location" && (
-          <p className="mt-4 text-[var(--muted)]">{today.message}</p>
-        )}
-        {!loading && today?.ok === false && today.reason === "weather_error" && (
-          <p className="mt-4 text-amber-200/90">{today.message}</p>
-        )}
-        {!loading && today?.ok === false && today.reason === "server_error" && (
-          <p className="mt-4 text-amber-200/90" role="alert">
-            {today.message ?? "Could not load today."}
-          </p>
-        )}
-        {!loading && today?.ok === true && (
-          <div className="mt-4 space-y-4">
-            <p className="text-[var(--muted)]">
-              <span className="text-[var(--text)]">{today.location.displayName || "Your area"}</span>
-              {" · "}
-              High {today.weather.tempMaxF}°F ({Math.round(today.weather.tempMaxC)}°C), low{" "}
-              {today.weather.tempMinF}°F · rain chance {today.weather.precipProbMax}%
-            </p>
-            <p className="text-lg text-[var(--text)]">
-              On a <em className="not-italic text-[var(--accent)]">{today.vibe.label}</em>, your best fit is:
-            </p>
-            {today.collectionCount === 0 && (
-              <p className="text-[var(--muted)]">Add a fragrance below to get a daily pick.</p>
+          {loadError ? (
+            <div className="mb-3 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-950/25 px-3 py-2 text-xs text-amber-100/95" role="alert">
+              <span className="truncate">{loadError}</span>
+              <button type="button" onClick={() => void load(todayOccasion)} className="shrink-0 rounded-md bg-amber-200/15 px-2 py-0.5 hover:bg-amber-200/25">Retry</button>
+            </div>
+          ) : null}
+
+          {/* Occasion chips */}
+          <div className="mb-3 flex shrink-0 flex-wrap gap-1.5">
+            {OCCASION_OPTIONS.map((o) => (
+              <button key={o} type="button" onClick={() => void selectOccasion(todayOccasion === o ? null : o)}
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${todayOccasion === o ? "bg-[var(--accent)] text-[var(--bg)]" : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"}`}>
+                {o}
+              </button>
+            ))}
+          </div>
+
+          {/* Pick */}
+          <div className="min-h-0 flex-1">
+            {loading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+            {!loading && today?.ok === false && (
+              <p className="text-sm text-amber-200/90">{today.message ?? "Could not load today."}</p>
             )}
-            {today.collectionCount > 0 && !today.pick && (
-              <p className="text-[var(--muted)]">Could not pick a bottle—try refreshing or re-saving your city.</p>
-            )}
-            {today.collectionCount > 0 && today.pick && (
-              <div className="flex flex-col items-center gap-5 rounded-2xl border border-[var(--border)]/70 bg-transparent p-5 sm:flex-row sm:items-center sm:gap-8">
-                <BottleThumb src={today.pick.imageUrl} label={today.pick.name} size="lg" />
-                <div className="min-w-0 flex-1 text-center sm:text-left">
-                  <p className="text-xl font-medium text-[var(--text)]">
-                    {today.pick.name}
-                    <span className="font-normal text-[var(--muted)]"> · {today.pick.brand}</span>
-                  </p>
-                  {today.pick.tags.length === 0 ? (
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      Add mood tags to this bottle for sharper matching next time.
-                    </p>
-                  ) : (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {today.pick.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-[var(--accent-soft)]/30 px-2 py-0.5 text-xs text-[var(--accent)]"
-                        >
-                          {t}
-                        </span>
-                      ))}
+            {!loading && today?.ok === true && (
+              <div className="space-y-2">
+                <p className="text-xs text-[var(--muted)]">
+                  <span className="text-[var(--text)]">{today.location.displayName || "Your area"}</span>
+                  {" · "}Hi {today.weather.tempMaxF}°F · rain {today.weather.precipProbMax}%
+                </p>
+                {today.collectionCount === 0 && <p className="text-xs text-[var(--muted)]">Add a fragrance to get a pick.</p>}
+                {today.collectionCount > 0 && !today.pick && <p className="text-xs text-[var(--muted)]">No match — try refreshing.</p>}
+                {today.collectionCount > 0 && today.pick && (
+                  <div className="flex items-center gap-4 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/50 p-3">
+                    <BottleThumb src={today.pick.imageUrl} label={today.pick.name} size="lg" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-medium text-[var(--text)]">{today.pick.name}</p>
+                      <p className="text-sm text-[var(--muted)]">{today.pick.brand}</p>
+                      <p className="mt-1 text-xs text-[var(--accent)]">{today.vibe.label}</p>
+                      {today.pick.tags.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {today.pick.tags.slice(0, 4).map((t) => (
+                            <span key={t} className="rounded-full bg-[var(--accent-soft)]/30 px-2 py-0.5 text-[10px] text-[var(--accent)]">{t}</span>
+                          ))}
+                        </div>
+                      )}
+                      {today.pick.fragranticaUrl && (
+                        <a href={today.pick.fragranticaUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[var(--accent)] underline underline-offset-2">Fragrantica ↗</a>
+                      )}
                     </div>
-                  )}
-                  {today.pick.fragranticaUrl ? (
-                    <a
-                      href={today.pick.fragranticaUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-block text-sm text-[var(--accent)] underline underline-offset-2"
-                    >
-                      Open on Fragrantica
-                    </a>
-                  ) : null}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </section>
+        </section>
 
-      <section className="mb-10 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
-        <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
-          Your city
-        </h2>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          We use{" "}
-          <a
-            href="https://open-meteo.com/"
-            className="underline decoration-[var(--border)] underline-offset-2 hover:text-[var(--accent)]"
-          >
-            Open-Meteo
-          </a>{" "}
-          (free, no API key). Saved as: {savedCity || "—"}
-        </p>
-        <form onSubmit={saveCity} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex-1">
-            <span className="sr-only">City</span>
-            <input
-              value={cityQuery}
-              onChange={(e) => {
-                setCityQuery(e.target.value);
-                setCitySaveError(null);
-              }}
-              placeholder="e.g. Austin, TX or London, UK"
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={savingCity}
-            className="rounded-xl bg-[var(--accent)] px-5 py-3 font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50"
-          >
-            {savingCity ? "Saving…" : "Save"}
-          </button>
-        </form>
-        {citySaveError ? (
-          <p className="mt-3 text-sm text-amber-200/90" role="alert">
-            {citySaveError}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="mb-10 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
-        <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
-          Add a fragrance
-        </h2>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Paste a Fragrantica perfume URL to auto-fill details — uses a local browser, no API key needed.
-          Or enter manually below.
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setAddSource("manual");
-              setFcError(null);
-            }}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              addSource === "manual"
-                ? "bg-[var(--accent)] text-[var(--bg)]"
-                : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
-            }`}
-          >
-            Manual
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAddSource("fragrantica");
-              setFcError(null);
-            }}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              addSource === "fragrantica"
-                ? "bg-[var(--accent)] text-[var(--bg)]"
-                : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
-            }`}
-          >
-            {"Catalog & Fragrantica"}
-          </button>
-        </div>
-
-        {addSource === "fragrantica" && (
-          <div className="mt-6 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg)]/40 p-4">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setFcMode("url");
-                  setFcError(null);
-                  setFcResults([]);
-                }}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
-                  fcMode === "url"
-                    ? "bg-[var(--accent-soft)]/40 text-[var(--accent)]"
-                    : "text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                Perfume URL
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFcMode("search");
-                  setFcError(null);
-                  setFcResults([]);
-                }}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
-                  fcMode === "search"
-                    ? "bg-[var(--accent-soft)]/40 text-[var(--accent)]"
-                    : "text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                Local search
-              </button>
-            </div>
-
-            {fcMode === "url" ? (
-              <form onSubmit={(e) => void fetchFragranticaFromUrl(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label className="min-w-0 flex-1">
-                  <span className="mb-1 block text-xs text-[var(--muted)]">Fragrantica perfume page</span>
-                  <input
-                    value={fcUrl}
-                    onChange={(e) => setFcUrl(e.target.value)}
-                    placeholder="https://www.fragrantica.com/perfume/…"
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  disabled={fcLoading}
-                  className="rounded-xl bg-[var(--accent)] px-5 py-3 font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50"
-                >
-                  {fcLoading ? "Fetching…" : "Fetch & fill form"}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={(e) => void fetchCatalogSearch(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label className="min-w-0 flex-1">
-                  <span className="mb-1 block text-xs text-[var(--muted)]">
-                    Search local catalog — results update as you type
-                  </span>
-                  <input
-                    value={fcQuery}
-                    onChange={(e) => setFcQuery(e.target.value)}
-                    placeholder="e.g. Sauvage, Chanel, Hermès"
-                    autoComplete="off"
-                    aria-autocomplete="list"
-                    aria-controls="catalog-search-results"
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  disabled={fcLoading || !fcQuery.trim()}
-                  className="rounded-xl bg-[var(--accent)] px-5 py-3 font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50"
-                >
-                  {fcLoading ? "Searching…" : "Search"}
-                </button>
-              </form>
+        {/* ── BOTTOM QUARTER: Add a fragrance ── */}
+        <section className="flex flex-1 flex-col overflow-hidden p-5 lg:p-6">
+          <h2 className="mb-3 shrink-0 font-[family-name:var(--font-fraunces)] text-base text-[var(--text)]">Add a fragrance</h2>
+          <div className="flex shrink-0 flex-col gap-2">
+            <label className="block">
+              <span className="mb-1 block text-xs text-[var(--muted)]">{fcLoading ? "Searching…" : "Search by name"}</span>
+              <input value={fcQuery} onChange={(e) => setFcQuery(e.target.value)}
+                placeholder="e.g. Sauvage, Chanel No.5"
+                autoComplete="off" aria-autocomplete="list" aria-controls="catalog-search-results"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
+            </label>
+            {fcLoading && (
+              <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                <Spinner />
+                {fcSearchSource === null ? "Searching Fragrantica…" : "Loading…"}
+              </div>
             )}
-
-            {fcError ? (
-              <p className="text-sm text-amber-200/90" role="alert">
-                {fcError}
+            {fcError ? <p className="text-xs text-amber-200/90" role="alert">{fcError}</p> : null}
+            {fcQuery.trim().length > 0 && !fcLoading && fcResults.length === 0 && !fcError && (
+              <p className="text-xs text-[var(--muted)]">No matches found.</p>
+            )}
+          </div>
+          {fcResults.length > 0 && (
+            <div id="catalog-search-results" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+              <p className="mb-1.5 text-xs text-[var(--muted)]">
+                {fcSearchSource === "fragrantica" ? "From Fragrantica — click to import:" : "Click to fill form:"}
               </p>
-            ) : null}
-
-            {fcMode === "search" && fcQuery.trim().length > 0 && !fcLoading && fcResults.length === 0 && !fcError ? (
-              <p className="text-sm text-[var(--muted)]">No matches for that search.</p>
-            ) : null}
-
-            {fcResults.length > 0 && (
-              <div id="catalog-search-results">
-                <p className="mb-2 text-sm text-[var(--muted)]">Pick a result to fill the form:</p>
-                <ul className="max-h-60 space-y-2 overflow-y-auto" role="listbox">
-                  {fcResults.map((r, i) => (
-                    <li key={`${r.fragranticaUrl}-${i}`}>
-                      <button
-                        type="button"
-                        onClick={() => applyFragranticaPreview(r)}
-                        className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/40 px-3 py-2.5 text-left text-sm backdrop-blur-[2px] hover:border-[var(--accent)]/80"
-                      >
-                        <BottleThumb src={r.imageUrl ?? ""} label={r.name} size="sm" />
-                        <span>
-                          <span className="font-medium text-[var(--text)]">{r.name}</span>
-                          <span className="text-[var(--muted)]"> · {r.brand}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        <form onSubmit={addFragrance} className="mt-4 space-y-4">
-          {newImageUrl.trim() ? (
-            <div className="flex items-center gap-4 rounded-2xl border border-[var(--border)]/60 bg-transparent p-3">
-              <BottleThumb src={newImageUrl} label={newName || "Preview"} size="md" />
-              <p className="text-xs text-[var(--muted)]">Saved with the bottle.</p>
+              <ul className="space-y-1.5" role="listbox">
+                {fcResults.map((r, i) => (
+                  <li key={`${r.fragranticaUrl}-${i}`}>
+                    <button type="button" onClick={() => applyFragranticaPreview(r)}
+                      className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--border)]/70 bg-[var(--bg)]/60 px-2.5 py-2 text-left text-sm hover:border-[var(--accent)]/80">
+                      <BottleThumb src={r.imageUrl ?? ""} label={r.name} size="sm" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-[var(--text)]">{r.name}</span>
+                        <span className="block truncate text-xs text-[var(--muted)]">{r.brand}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input
-              required
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Name"
-              className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-            />
-            <input
-              required
-              value={newBrand}
-              onChange={(e) => setNewBrand(e.target.value)}
-              placeholder="Brand / house"
-              className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-            />
-          </div>
-          <div>
-            <p className="mb-2 text-sm text-[var(--muted)]">Scent tags</p>
-            <div className="flex flex-wrap gap-2">
-              {TAG_OPTIONS.map((t) => {
-                const on = newTags.includes(t);
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => toggleNewTag(t)}
-                    className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
-                      on
-                        ? "bg-[var(--accent)] text-[var(--bg)]"
-                        : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <p className="mb-2 text-sm text-[var(--muted)]">Occasions</p>
-            <div className="flex flex-wrap gap-2">
-              {OCCASION_OPTIONS.map((o) => {
-                const on = newOccasions.includes(o);
-                return (
-                  <button
-                    key={o}
-                    type="button"
-                    onClick={() => toggleNewOccasion(o)}
-                    className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
-                      on
-                        ? "bg-[var(--accent)] text-[var(--bg)]"
-                        : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
-                    }`}
-                  >
-                    {o}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <p className="mb-2 text-sm text-[var(--muted)]">Seasons</p>
-            <div className="flex flex-wrap gap-2">
-              {SEASON_OPTIONS.map((s) => {
-                const on = newSeasons.includes(s);
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() =>
-                      setNewSeasons((prev) =>
-                        prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-                      )
-                    }
-                    className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
-                      on
-                        ? "bg-[var(--accent)] text-[var(--bg)]"
-                        : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <textarea
-            value={newNotes}
-            onChange={(e) => setNewNotes(e.target.value)}
-            placeholder="Notes (batch code, pyramid text from Fragrantica, …)"
-            rows={3}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-          />
-          {newFragranticaUrl ? (
-            <p className="text-xs text-[var(--muted)]">
-              Linked:{" "}
-              <a
-                href={newFragranticaUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[var(--accent)] underline underline-offset-2"
-              >
-                Fragrantica
-              </a>
-            </p>
-          ) : null}
-          {addError ? (
-            <p className="text-sm text-amber-200/90" role="alert">
-              {addError}
-            </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={adding}
-            className="rounded-xl border border-[var(--good)]/50 bg-[var(--good)]/20 px-5 py-3 font-medium text-[var(--good)] hover:bg-[var(--good)]/30 disabled:opacity-50"
-          >
-            {adding ? "Adding…" : "Add to collection"}
-          </button>
-        </form>
-      </section>
+          )}
+        </section>
+      </div>
 
-      <section
-        id="collection"
-        className="scroll-mt-8 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6"
-      >
-        <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
-          Collection ({fragrances.length})
+      {/* ══ RIGHT HALF: Collection ══ */}
+      <div className="flex flex-1 flex-col overflow-hidden p-5 lg:w-1/2 lg:p-6">
+        <h2 className="mb-4 shrink-0 font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
+          Collection <span className="text-[var(--muted)]">({fragrances.length})</span>
         </h2>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Bottles only — click a tile for details and Fragrantica. Use × to remove.
-        </p>
         {fragrances.length === 0 && (
-          <p className="mt-4 text-[var(--muted)]">Nothing here yet—add your first bottle above.</p>
+          <p className="text-[var(--muted)]">Nothing here yet — search on the left to add your first bottle.</p>
         )}
         {fragrances.length > 0 && (
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
+          <div className="grid auto-rows-fr gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}>
             {fragrances.map((f) => (
-              <CollectionTile
-                key={f.id}
-                id={f.id}
-                imageSrc={f.imageUrl ?? ""}
+              <CollectionTile key={f.id} id={f.id} imageSrc={f.imageUrl ?? ""}
                 ariaLabel={`Open details: ${f.name} by ${f.brand}`}
-                wearCount={f.wearCount ?? 0}
-                lastWornAt={f.lastWornAt ?? null}
+                wearCount={f.wearCount ?? 0} lastWornAt={f.lastWornAt ?? null}
                 onRemove={() => void removeFragrance(f.id)}
-                onWoreToday={() => void logWear(f.id)}
-              />
+                onWoreToday={() => void logWear(f.id)} />
             ))}
           </div>
         )}
-      </section>
-    </main>
+      </div>
+
+      {/* ══ CITY MODAL ══ */}
+      {showCityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowCityModal(false); }}>
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">Your city</h2>
+              <button type="button" onClick={() => setShowCityModal(false)} className="rounded-lg p-1.5 text-[var(--muted)] hover:text-[var(--text)]">✕</button>
+            </div>
+            <p className="mb-3 text-sm text-[var(--muted)]">
+              Used for weather-based picks via{" "}
+              <a href="https://open-meteo.com/" className="text-[var(--accent)] underline underline-offset-2">Open-Meteo</a>.
+              Currently: <span className="text-[var(--text)]">{savedCity || "not set"}</span>
+            </p>
+            <form onSubmit={async (e) => { await saveCity(e); if (!citySaveError) setShowCityModal(false); }} className="flex gap-2">
+              <input value={cityQuery} onChange={(e) => { setCityQuery(e.target.value); setCitySaveError(null); }}
+                placeholder="e.g. Austin, TX or London, UK"
+                className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
+              <button type="submit" disabled={savingCity}
+                className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50">
+                {savingCity ? "…" : "Save"}
+              </button>
+            </form>
+            {citySaveError ? <p className="mt-2 text-xs text-amber-200/90" role="alert">{citySaveError}</p> : null}
+          </div>
+        </div>
+      )}
+
+      {/* ══ ADD FORM MODAL ══ */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget && !fcEnriching) setShowModal(false); }}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">Add to collection</h2>
+              <button type="button" onClick={() => setShowModal(false)} disabled={fcEnriching} className="rounded-lg p-1.5 text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-40">✕</button>
+            </div>
+            {newImageUrl.trim() ? (
+              <div className="mb-4 flex items-center gap-4 rounded-2xl border border-[var(--border)]/60 p-3">
+                <BottleThumb src={newImageUrl} label={newName || "Preview"} size="md" />
+                <div>
+                  <p className="font-medium text-[var(--text)]">{newName}</p>
+                  <p className="text-sm text-[var(--muted)]">{newBrand}</p>
+                </div>
+              </div>
+            ) : null}
+            <form onSubmit={addFragrance} className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input required value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
+                <input required value={newBrand} onChange={(e) => setNewBrand(e.target.value)} placeholder="Brand / house"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
+              </div>
+              {fcEnriching && (
+                <div className="flex items-center gap-3 rounded-xl border border-[var(--accent-soft)]/40 bg-[var(--accent-soft)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+                  <Spinner />
+                  Fetching scent details — tags, seasons &amp; occasions will fill in shortly…
+                </div>
+              )}
+              <div className={fcEnriching ? "pointer-events-none opacity-50" : ""}>
+                <p className="mb-2 text-sm text-[var(--muted)]">Scent tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {TAG_OPTIONS.map((t) => { const on = newTags.includes(t); return (
+                    <button key={t} type="button" onClick={() => toggleNewTag(t)}
+                      className={`rounded-full px-3 py-1.5 text-sm transition-colors ${on ? "bg-[var(--accent)] text-[var(--bg)]" : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"}`}>
+                      {t}
+                    </button>
+                  ); })}
+                </div>
+              </div>
+              <div className={fcEnriching ? "pointer-events-none opacity-50" : ""}>
+                <p className="mb-2 text-sm text-[var(--muted)]">Occasions</p>
+                <div className="flex flex-wrap gap-2">
+                  {OCCASION_OPTIONS.map((o) => { const on = newOccasions.includes(o); return (
+                    <button key={o} type="button" onClick={() => toggleNewOccasion(o)}
+                      className={`rounded-full px-3 py-1.5 text-sm transition-colors ${on ? "bg-[var(--accent)] text-[var(--bg)]" : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"}`}>
+                      {o}
+                    </button>
+                  ); })}
+                </div>
+              </div>
+              <div className={fcEnriching ? "pointer-events-none opacity-50" : ""}>
+                <p className="mb-2 text-sm text-[var(--muted)]">Seasons</p>
+                <div className="flex flex-wrap gap-2">
+                  {SEASON_OPTIONS.map((s) => { const on = newSeasons.includes(s); return (
+                    <button key={s} type="button" onClick={() => setNewSeasons((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])}
+                      className={`rounded-full px-3 py-1.5 text-sm transition-colors ${on ? "bg-[var(--accent)] text-[var(--bg)]" : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"}`}>
+                      {s}
+                    </button>
+                  ); })}
+                </div>
+              </div>
+              {newFragranticaUrl ? (
+                <p className="text-xs text-[var(--muted)]">Linked: <a href={newFragranticaUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline underline-offset-2">Fragrantica ↗</a></p>
+              ) : null}
+              {addError ? <p className="text-sm text-amber-200/90" role="alert">{addError}</p> : null}
+              <div className="flex gap-3">
+                <button type="submit" disabled={adding || fcEnriching}
+                  className="flex-1 rounded-xl border border-[var(--good)]/50 bg-[var(--good)]/20 px-5 py-3 font-medium text-[var(--good)] hover:bg-[var(--good)]/30 disabled:opacity-50">
+                  {adding ? "Adding…" : fcEnriching ? "Fetching details…" : "Add to collection"}
+                </button>
+                <button type="button" onClick={() => setShowModal(false)} disabled={adding || fcEnriching}
+                  className="rounded-xl border border-[var(--border)] px-5 py-3 text-sm text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-50">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

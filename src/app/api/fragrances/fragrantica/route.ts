@@ -5,6 +5,9 @@ import { readJsonBody } from "@/lib/request-json";
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
 import { parseSeasonsFromJson } from "@/lib/season-options";
+import { parseOccasionsFromJson } from "@/lib/occasion-options";
+import { inferOccasions } from "@/lib/infer-occasions";
+import { inferTagsFromNotes } from "@/lib/infer-tags";
 import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
 
 export const runtime = "nodejs";
@@ -21,12 +24,17 @@ function catalogToPreview(row: {
   imageUrl: string;
 }): FragranticaPreview {
   const imageUrl = row.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl);
+  const stored = parseTagsFromJson(row.tags);
+  // Backfill tags for cache entries saved before tag inference was added
+  const tags = stored.length > 0 ? stored : inferTagsFromNotes(row.notes);
+  const seasons = parseSeasonsFromJson(row.seasons);
   return {
     name: row.name,
     brand: row.brand,
     notes: row.notes,
-    tags: parseTagsFromJson(row.tags),
-    seasons: parseSeasonsFromJson(row.seasons),
+    tags,
+    seasons,
+    occasions: inferOccasions(tags, seasons, row.notes),
     fragranticaUrl: row.fragranticaUrl,
     imageUrl,
   };
@@ -69,7 +77,15 @@ export async function POST(request: Request) {
   }).catch(() => null);
 
   if (cached) {
-    return NextResponse.json({ results: [catalogToPreview(cached)], cached: true });
+    const preview = catalogToPreview(cached);
+    // Backfill tags in DB if the cached entry pre-dates tag inference
+    if (parseTagsFromJson(cached.tags).length === 0 && preview.tags.length > 0) {
+      prisma.fragranceCatalog.update({
+        where: { fragranticaUrl: canonical },
+        data: { tags: JSON.stringify(preview.tags) },
+      }).catch(() => {});
+    }
+    return NextResponse.json({ results: [preview], cached: true });
   }
 
   try {

@@ -2,6 +2,8 @@ import * as cheerio from "cheerio";
 import type { FragranticaPreview } from "./apify-fragrantica";
 import { imageUrlFromFragranticaPerfumeUrl } from "./apify-fragrantica";
 import { SEASON_OPTIONS, type Season } from "./season-options";
+import { inferOccasions } from "./infer-occasions";
+import { inferTags } from "./infer-tags";
 
 function firstNonEmpty(...vals: Array<string | undefined | null>): string {
   for (const v of vals) {
@@ -143,8 +145,10 @@ function htmlToPreview(html: string, canonicalUrl: string): FragranticaPreview {
   if (!name || !brand) throw new Error("SCRAPE_FAILED_MISSING_NAME_OR_BRAND");
 
   const seasons = extractSeasons(html);
+  const tags = inferTags(html, notes);
+  const occasions = inferOccasions(tags, seasons, notes);
 
-  return { name, brand, notes, tags: [], seasons, fragranticaUrl: canonicalUrl, imageUrl };
+  return { name, brand, notes, tags, seasons, occasions, fragranticaUrl: canonicalUrl, imageUrl };
 }
 
 export async function scrapeFragranticaUrl(url: string): Promise<FragranticaPreview> {

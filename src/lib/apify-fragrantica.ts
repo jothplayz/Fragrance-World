@@ -10,6 +10,7 @@ export type FragranticaPreview = {
   notes: string;
   tags: FragranceTag[];
   seasons: string[];
+  occasions: string[];
   fragranticaUrl: string;
   imageUrl: string;
 };
@@ -222,6 +223,7 @@ export function mapFragranticaItem(item: Record<string, unknown>): FragranticaPr
     notes,
     tags,
     seasons: [],
+    occasions: [],
     fragranticaUrl: url,
     imageUrl,
   };

@@ -76,7 +76,7 @@ export function CollectionTile({
                 src={safe}
                 alt=""
                 fill
-                sizes="(max-width:640px) 45vw, (max-width:1024px) 30vw, 22vw"
+                sizes="(max-width:640px) 45vw, (max-width:1024px) 28vw, 120px"
                 className="object-contain object-center [filter:drop-shadow(0_10px_22px_rgb(0_0_0/0.42))] transition-transform group-hover:scale-[1.02]"
                 onError={() => setFailed(true)}
               />

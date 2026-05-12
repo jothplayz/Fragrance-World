@@ -4,6 +4,9 @@ import { imageUrlFromFragranticaPerfumeUrl, type FragranticaPreview } from "@/li
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
 import { parseSeasonsFromJson } from "@/lib/season-options";
+import { parseOccasionsFromJson } from "@/lib/occasion-options";
+import { inferOccasions } from "@/lib/infer-occasions";
+import { inferTagsFromNotes } from "@/lib/infer-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,14 +20,18 @@ function toPreview(row: {
   fragranticaUrl: string;
   imageUrl: string;
 }): FragranticaPreview {
-  const stored = row.imageUrl?.trim() ?? "";
-  const imageUrl = stored || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl);
+  const storedImage = row.imageUrl?.trim() ?? "";
+  const imageUrl = storedImage || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl);
+  const storedTags = parseTagsFromJson(row.tags);
+  const tags = storedTags.length > 0 ? storedTags : inferTagsFromNotes(row.notes);
+  const seasons = parseSeasonsFromJson(row.seasons ?? "[]");
   return {
     name: row.name,
     brand: row.brand,
     notes: row.notes,
-    tags: parseTagsFromJson(row.tags),
-    seasons: parseSeasonsFromJson(row.seasons ?? "[]"),
+    tags,
+    seasons,
+    occasions: inferOccasions(tags, seasons, row.notes),
     fragranticaUrl: row.fragranticaUrl,
     imageUrl,
   };
