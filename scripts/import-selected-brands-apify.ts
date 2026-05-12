@@ -17,6 +17,7 @@ import {
   DEFAULT_FRAGRANTICA_ACTOR_ID,
   mapFragranticaItem,
 } from "../src/lib/apify-fragrantica";
+import { summarizeNotes } from "../src/lib/summarize-notes";
 
 function loadDotEnv() {
   const p = join(process.cwd(), ".env");
@@ -43,15 +44,6 @@ function normalizeTags(input: unknown): string {
     (t): t is string => typeof t === "string" && TAG_OPTIONS.includes(t as (typeof TAG_OPTIONS)[number])
   );
   return JSON.stringify(ok);
-}
-
-/** Max two sentences; trim length for DB display. */
-function summarizeNotes(raw: string, maxLen = 450): string {
-  const oneLine = raw.replace(/\s+/g, " ").trim();
-  if (!oneLine) return "";
-  const sentences = oneLine.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0);
-  const two = sentences.slice(0, 2).join(" ").trim();
-  return two.length > maxLen ? `${two.slice(0, maxLen - 1).trim()}…` : two;
 }
 
 function keepForMensCatalog(raw: Record<string, unknown>): boolean {

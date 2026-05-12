@@ -2,12 +2,21 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
 import { humanVibeLabel, rankFragrances, vibesFromWeather } from "@/lib/suggestions";
+import type { Occasion } from "@/lib/occasion-options";
+import { OCCASION_OPTIONS } from "@/lib/occasion-options";
 import { cToF, fetchTodayWeather } from "@/lib/weather";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const occasionParam = searchParams.get("occasion");
+  const selectedOccasion: Occasion | null =
+    occasionParam && (OCCASION_OPTIONS as readonly string[]).includes(occasionParam)
+      ? (occasionParam as Occasion)
+      : null;
+
   try {
     const settings = await prisma.appSettings.findUnique({ where: { id: 1 } });
     const lat = settings?.latitude;
@@ -17,11 +26,30 @@ export async function GET() {
       return NextResponse.json({
         ok: false,
         reason: "no_location",
-        message: "Set your city in settings so we can load weather.",
+        message: "Set your city so we can load the weather.",
       });
     }
 
-    const fragrances = await prisma.fragrance.findMany({ orderBy: { createdAt: "desc" } });
+    // Fetch fragrances with wear stats in one query
+    const raw = await prisma.fragrance.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: { select: { wearLogs: true } },
+        wearLogs: {
+          orderBy: { wornAt: "desc" },
+          take: 1,
+          select: { wornAt: true },
+        },
+      },
+    });
+
+    const fragrances = raw.map((f) => ({
+      ...f,
+      wearStats: {
+        lastWornAt: f.wearLogs[0]?.wornAt ?? null,
+        wearCount: f._count.wearLogs,
+      },
+    }));
 
     let weather;
     try {
@@ -32,10 +60,12 @@ export async function GET() {
     }
 
     const vibes = vibesFromWeather(weather);
-    const ranked = rankFragrances(fragrances, weather);
+    const ranked = rankFragrances(fragrances, weather, selectedOccasion);
     const best = ranked[0];
     const pickImage =
-      best && (best.fragrance.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(best.fragrance.fragranticaUrl));
+      best &&
+      (best.fragrance.imageUrl?.trim() ||
+        imageUrlFromFragranticaPerfumeUrl(best.fragrance.fragranticaUrl));
 
     return NextResponse.json({
       ok: true,
@@ -57,16 +87,19 @@ export async function GET() {
         keys: vibes,
         label: humanVibeLabel(vibes),
       },
+      selectedOccasion,
       pick: best
         ? {
             id: best.fragrance.id,
             name: best.fragrance.name,
             brand: best.fragrance.brand,
             tags: best.tags,
+            occasions: best.occasions,
             score: best.score,
             notes: best.fragrance.notes,
             imageUrl: pickImage ?? "",
             fragranticaUrl: best.fragrance.fragranticaUrl ?? "",
+            wearStats: best.wearStats,
           }
         : null,
       collectionCount: fragrances.length,
@@ -74,14 +107,7 @@ export async function GET() {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Server error";
     return NextResponse.json(
-      {
-        ok: false,
-        reason: "server_error",
-        message:
-          message.includes("imageUrl") || message.includes("FragranceCatalog")
-            ? `${message} If you just pulled an update, run: npx prisma db push`
-            : message,
-      },
+      { ok: false, reason: "server_error", message },
       { status: 500 }
     );
   }

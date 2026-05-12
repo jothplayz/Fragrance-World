@@ -1,10 +1,29 @@
 import { NextResponse } from "next/server";
+import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
+import { enrichFragranceRecord } from "@/lib/enrich-fragrance";
 import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/request-json";
 import { TAG_OPTIONS } from "@/lib/tag-options";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, ctx: Ctx) {
+  const { id } = await ctx.params;
+  try {
+    const row = await prisma.fragrance.findUnique({ where: { id } });
+    if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({
+      ...row,
+      imageUrl: row.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl),
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Database error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
 
 function normalizeTags(input: unknown): string {
   if (!Array.isArray(input)) return "[]";
@@ -13,8 +32,6 @@ function normalizeTags(input: unknown): string {
   );
   return JSON.stringify(ok);
 }
-
-type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, ctx: Ctx) {
   const parsed = await readJsonBody<{
@@ -47,6 +64,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
         ...(typeof body.imageUrl === "string" ? { imageUrl: body.imageUrl.trim() } : {}),
       },
     });
+
+    const urlChanged =
+      typeof body.fragranticaUrl === "string" &&
+      body.fragranticaUrl.trim() !== existing.fragranticaUrl.trim();
+    const nameChanged = typeof body.name === "string" && body.name.trim() !== existing.name;
+    const brandChanged = typeof body.brand === "string" && body.brand.trim() !== existing.brand;
+    if (urlChanged || nameChanged || brandChanged) {
+      void enrichFragranceRecord(id, { force: true }).catch(() => {});
+    }
+
     return NextResponse.json(row);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Database error";

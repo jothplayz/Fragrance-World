@@ -18,6 +18,7 @@
     "catalog:import-dataset": "npx tsx scripts/import-apify-dataset.ts",
     "catalog:import-brands": "npx tsx scripts/import-selected-brands-apify.ts",
     "catalog:scrape-fragrantica": "npx tsx scripts/scrape-fragrantica.ts",
+    "enrich:fragrances": "npx tsx scripts/enrich-fragrances.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
