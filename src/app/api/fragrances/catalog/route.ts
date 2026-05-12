@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { imageUrlFromFragranticaPerfumeUrl, type FragranticaPreview } from "@/lib/apify-fragrantica";
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
+import { parseSeasonsFromJson } from "@/lib/season-options";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ function toPreview(row: {
   brand: string;
   notes: string;
   tags: string;
+  seasons: string;
   fragranticaUrl: string;
   imageUrl: string;
 }): FragranticaPreview {
@@ -22,6 +24,7 @@ function toPreview(row: {
     brand: row.brand,
     notes: row.notes,
     tags: parseTagsFromJson(row.tags),
+    seasons: parseSeasonsFromJson(row.seasons ?? "[]"),
     fragranticaUrl: row.fragranticaUrl,
     imageUrl,
   };
@@ -30,11 +33,8 @@ function toPreview(row: {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
-  if (q.length < 2) {
-    return NextResponse.json(
-      { error: "Query must be at least 2 characters.", results: [] },
-      { status: 400 }
-    );
+  if (q.length === 0) {
+    return NextResponse.json({ results: [] });
   }
 
   try {
@@ -46,12 +46,13 @@ export async function GET(request: Request) {
         name: string;
         brand: string;
         tags: string;
+        seasons: string;
         notes: string;
         fragranticaUrl: string;
         imageUrl: string;
       }>
     >(Prisma.sql`
-      SELECT "id", "name", "brand", "tags", "notes", "fragranticaUrl", "imageUrl"
+      SELECT "id", "name", "brand", "tags", "seasons", "notes", "fragranticaUrl", "imageUrl"
       FROM "FragranceCatalog"
       WHERE "name" LIKE ${pattern} COLLATE NOCASE
          OR "brand" LIKE ${pattern} COLLATE NOCASE

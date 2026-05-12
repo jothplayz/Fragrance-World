@@ -1,28 +1,69 @@
 import { NextResponse } from "next/server";
 import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
+import { enrichFragranceRecord } from "@/lib/enrich-fragrance";
 import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/request-json";
 import { TAG_OPTIONS } from "@/lib/tag-options";
+import { OCCASION_OPTIONS } from "@/lib/occasion-options";
+import { SEASON_OPTIONS } from "@/lib/season-options";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function normalizeTags(input: unknown): string {
   if (!Array.isArray(input)) return "[]";
-  const ok = input.filter(
-    (t): t is string => typeof t === "string" && TAG_OPTIONS.includes(t as (typeof TAG_OPTIONS)[number])
+  return JSON.stringify(
+    input.filter(
+      (t): t is string => typeof t === "string" && TAG_OPTIONS.includes(t as (typeof TAG_OPTIONS)[number])
+    )
   );
-  return JSON.stringify(ok);
+}
+
+function normalizeOccasions(input: unknown): string {
+  if (!Array.isArray(input)) return "[]";
+  return JSON.stringify(
+    input.filter(
+      (t): t is string =>
+        typeof t === "string" && (OCCASION_OPTIONS as readonly string[]).includes(t)
+    )
+  );
+}
+
+function normalizeSeasons(input: unknown): string {
+  if (!Array.isArray(input)) return "[]";
+  return JSON.stringify(
+    input.filter(
+      (t): t is string =>
+        typeof t === "string" && (SEASON_OPTIONS as readonly string[]).includes(t)
+    )
+  );
 }
 
 export async function GET() {
   try {
-    const list = await prisma.fragrance.findMany({ orderBy: { createdAt: "desc" } });
-    const withImages = list.map((f) => ({
+    const raw = await prisma.fragrance.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: { select: { wearLogs: true } },
+        wearLogs: {
+          orderBy: { wornAt: "desc" },
+          take: 1,
+          select: { wornAt: true },
+        },
+      },
+    });
+
+    const list = raw.map((f) => ({
       ...f,
       imageUrl: f.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(f.fragranticaUrl),
+      wearCount: f._count.wearLogs,
+      lastWornAt: f.wearLogs[0]?.wornAt?.toISOString() ?? null,
+      // strip internal prisma relations from response
+      _count: undefined,
+      wearLogs: undefined,
     }));
-    return NextResponse.json(withImages);
+
+    return NextResponse.json(list);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Database error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -34,6 +75,8 @@ export async function POST(request: Request) {
     name?: string;
     brand?: string;
     tags?: unknown;
+    occasions?: unknown;
+    seasons?: unknown;
     notes?: string;
     fragranticaUrl?: string;
     imageUrl?: string;
@@ -59,12 +102,21 @@ export async function POST(request: Request) {
         name,
         brand,
         tags: normalizeTags(body.tags),
+        occasions: normalizeOccasions(body.occasions),
+        seasons: normalizeSeasons(body.seasons),
         notes,
         fragranticaUrl,
         imageUrl,
       },
     });
-    return NextResponse.json(row, { status: 201 });
+    try {
+      await enrichFragranceRecord(row.id, { wikipediaOnly: true });
+    } catch {
+      /* optional */
+    }
+    void enrichFragranceRecord(row.id).catch(() => {});
+    const fresh = await prisma.fragrance.findUnique({ where: { id: row.id } });
+    return NextResponse.json(fresh ?? row, { status: 201 });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Database error";
     return NextResponse.json({ error: message }, { status: 500 });

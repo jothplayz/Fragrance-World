@@ -8,17 +8,30 @@ datasource db {
 }
 
 model Fragrance {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   name           String
   brand          String
-  /// Mood tags used for weather matching: fresh, citrus, aquatic, floral, woody, amber, gourmand, spicy, green, musk
-  tags           String   @default("[]") // JSON array of strings (SQLite)
-  notes          String   @default("")
-  fragranticaUrl String   @default("")
-  /// Bottle / card image (e.g. fimgs.net from Fragrantica)
-  imageUrl       String   @default("")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  tags           String    @default("[]") // JSON: fresh|citrus|aquatic|floral|woody|amber|gourmand|spicy|green|musk
+  occasions      String    @default("[]") // JSON: casual|work|date|formal|evening|sport
+  notes          String    @default("")
+  fragranticaUrl String    @default("")
+  imageUrl       String    @default("")
+  seasons        String    @default("[]") // JSON: spring|summer|fall|winter
+  enrichmentJson String    @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  wearLogs       WearLog[]
+}
+
+model WearLog {
+  id          String    @id @default(cuid())
+  fragranceId String
+  fragrance   Fragrance @relation(fields: [fragranceId], references: [id], onDelete: Cascade)
+  wornAt      DateTime  @default(now())
+  occasion    String    @default("")
+
+  @@index([fragranceId])
+  @@index([wornAt])
 }
 
 /// Reference perfumes for local search (seeded JSON + optional Apify URL import). Not the user collection.
@@ -27,6 +40,7 @@ model FragranceCatalog {
   name           String
   brand          String
   tags           String   @default("[]")
+  seasons        String   @default("[]") // JSON: spring|summer|fall|winter
   notes          String   @default("")
   fragranticaUrl String   @unique
   imageUrl       String   @default("")

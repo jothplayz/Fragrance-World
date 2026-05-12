@@ -1,72 +1,23 @@
 "use client";
 
-import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
-import { safeImageSrc } from "@/lib/safe-image-src";
-import { parseTagsFromJson, TAG_OPTIONS, type FragranceTag } from "@/lib/tag-options";
-
-/** Portrait 3:4 slots like Fragrantica product cards: transparent fill, contain-fit bottle, soft inset hairline. */
-function BottleThumb({
-  src,
-  label,
-  size = "md",
-}: {
-  src: string;
-  label: string;
-  size?: "sm" | "md" | "lg";
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const widthClass =
-    size === "sm" ? "w-11 sm:w-12" : size === "lg" ? "w-[9rem] sm:w-44" : "w-[4.5rem] sm:w-[5.25rem]";
-  const sizesAttr = size === "sm" ? "48px" : size === "lg" ? "(max-width:640px) 144px, 176px" : "84px";
-  const safeSrc = safeImageSrc(src);
-
-  useEffect(() => {
-    setImgFailed(false);
-  }, [safeSrc]);
-
-  if (!safeSrc || imgFailed) {
-    return (
-      <div
-        className={`relative flex aspect-[3/4] shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--text)_9%,transparent)] ${widthClass}`}
-        aria-hidden
-      >
-        <span className="text-sm font-medium text-[var(--muted)]/75 sm:text-base">
-          {label.trim().slice(0, 1).toUpperCase() || "?"}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`relative aspect-[3/4] shrink-0 overflow-hidden rounded-2xl bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--text)_9%,transparent)] ${widthClass}`}
-    >
-      <div className="absolute inset-2 sm:inset-2.5">
-        <div className="relative h-full w-full">
-          <Image
-            src={safeSrc}
-            alt={`${label} bottle`}
-            fill
-            sizes={sizesAttr}
-            className="object-contain object-center [filter:drop-shadow(0_10px_22px_rgb(0_0_0/0.42))]"
-            priority={size === "lg"}
-            onError={() => setImgFailed(true)}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BottleThumb } from "@/components/BottleThumb";
+import { CollectionTile } from "@/components/CollectionTile";
+import { TAG_OPTIONS, type FragranceTag } from "@/lib/tag-options";
+import { OCCASION_OPTIONS, type Occasion } from "@/lib/occasion-options";
+import { SEASON_OPTIONS, type Season } from "@/lib/season-options";
 
 type FragranceRow = {
   id: string;
   name: string;
   brand: string;
   tags: string;
+  occasions: string;
   notes: string;
   fragranticaUrl: string;
   imageUrl?: string;
+  wearCount: number;
+  lastWornAt: string | null;
 };
 
 type FragranticaPreview = {
@@ -74,6 +25,7 @@ type FragranticaPreview = {
   brand: string;
   notes: string;
   tags: FragranceTag[];
+  seasons: Season[];
   fragranticaUrl: string;
   imageUrl?: string;
 };
@@ -91,15 +43,18 @@ type TodayPayload =
         precipProbMax: number;
       };
       vibe: { label: string };
+      selectedOccasion: Occasion | null;
       pick: {
         id: string;
         name: string;
         brand: string;
         tags: FragranceTag[];
+        occasions: Occasion[];
         score: number;
         notes?: string;
         imageUrl: string;
         fragranticaUrl: string;
+        wearStats: { lastWornAt: string | null; wearCount: number };
       } | null;
       collectionCount: number;
     }
@@ -113,10 +68,13 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [savingCity, setSavingCity] = useState(false);
   const [citySaveError, setCitySaveError] = useState<string | null>(null);
+  const [todayOccasion, setTodayOccasion] = useState<Occasion | null>(null);
 
   const [newName, setNewName] = useState("");
   const [newBrand, setNewBrand] = useState("");
   const [newTags, setNewTags] = useState<FragranceTag[]>([]);
+  const [newOccasions, setNewOccasions] = useState<Occasion[]>([]);
+  const [newSeasons, setNewSeasons] = useState<Season[]>([]);
   const [newNotes, setNewNotes] = useState("");
   const [newFragranticaUrl, setNewFragranticaUrl] = useState("");
   const [newImageUrl, setNewImageUrl] = useState("");
@@ -132,29 +90,37 @@ export default function Home() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const catalogAbortRef = useRef<AbortController | null>(null);
+  const catalogDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadToday = useCallback(async (occasion: Occasion | null) => {
+    const qs = occasion ? `?occasion=${occasion}` : "";
+    const tRes = await fetch(`/api/today${qs}`);
+    const tJson = (await tRes.json()) as TodayPayload;
+    if (tJson && typeof tJson === "object" && "ok" in tJson) {
+      setToday(tJson);
+    } else {
+      setToday({ ok: false, reason: "server_error", message: "Unexpected response from /api/today." });
+    }
+  }, []);
+
+  const load = useCallback(async (occasion: Occasion | null = null) => {
     setLoading(true);
     setLoadError(null);
     try {
-      const [fRes, sRes, tRes] = await Promise.all([
+      const [fRes, sRes] = await Promise.all([
         fetch("/api/fragrances"),
         fetch("/api/settings"),
-        fetch("/api/today"),
       ]);
       const fJson = (await fRes.json()) as unknown;
       const sJson = (await sRes.json()) as { cityQuery?: string; displayName?: string };
-      const tJson = (await tRes.json()) as TodayPayload;
       setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
       setCityQuery(typeof sJson.cityQuery === "string" ? sJson.cityQuery : "");
       setSavedCity(
         (typeof sJson.displayName === "string" ? sJson.displayName : "") ||
           (typeof sJson.cityQuery === "string" ? sJson.cityQuery : "")
       );
-      if (tJson && typeof tJson === "object" && "ok" in tJson) {
-        setToday(tJson);
-      } else {
-        setToday({ ok: false, reason: "server_error", message: "Unexpected response from /api/today." });
-      }
+      await loadToday(occasion);
       if (!fRes.ok && !Array.isArray(fJson)) {
         const err = fJson as { error?: string };
         setLoadError(typeof err.error === "string" ? err.error : "Could not load your collection.");
@@ -165,11 +131,80 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadToday]);
 
   useEffect(() => {
-    void load();
+    void load(null);
   }, [load]);
+
+  useEffect(() => {
+    if (addSource !== "fragrantica" || fcMode !== "search") {
+      catalogAbortRef.current?.abort();
+      if (catalogDebounceRef.current) {
+        clearTimeout(catalogDebounceRef.current);
+        catalogDebounceRef.current = null;
+      }
+      setFcResults([]);
+      setFcLoading(false);
+      setFcError(null);
+      return;
+    }
+
+    const q = fcQuery.trim();
+    if (q.length < 1) {
+      catalogAbortRef.current?.abort();
+      if (catalogDebounceRef.current) {
+        clearTimeout(catalogDebounceRef.current);
+        catalogDebounceRef.current = null;
+      }
+      setFcResults([]);
+      setFcLoading(false);
+      setFcError(null);
+      return;
+    }
+
+    if (catalogDebounceRef.current) clearTimeout(catalogDebounceRef.current);
+
+    catalogDebounceRef.current = setTimeout(() => {
+      catalogDebounceRef.current = null;
+      catalogAbortRef.current?.abort();
+      const ac = new AbortController();
+      catalogAbortRef.current = ac;
+      setFcLoading(true);
+      setFcError(null);
+      void (async () => {
+        try {
+          const res = await fetch(`/api/fragrances/catalog?q=${encodeURIComponent(q)}`, {
+            signal: ac.signal,
+          });
+          const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+          if (ac.signal.aborted) return;
+          if (!res.ok) {
+            setFcError(typeof body.error === "string" ? body.error : "Search failed.");
+            setFcResults([]);
+            return;
+          }
+          const list = Array.isArray(body.results) ? body.results : [];
+          setFcResults(list);
+          setFcError(null);
+        } catch (e) {
+          if (e instanceof Error && e.name === "AbortError") return;
+          setFcError("Network error.");
+          setFcResults([]);
+        } finally {
+          if (!ac.signal.aborted) setFcLoading(false);
+        }
+      })();
+    }, 300);
+
+    return () => {
+      catalogAbortRef.current?.abort();
+      if (catalogDebounceRef.current) {
+        clearTimeout(catalogDebounceRef.current);
+        catalogDebounceRef.current = null;
+      }
+    };
+  }, [fcQuery, fcMode, addSource]);
 
   async function saveCity(e: React.FormEvent) {
     e.preventDefault();
@@ -199,6 +234,7 @@ export default function Home() {
     setNewBrand(p.brand);
     setNewNotes(p.notes);
     setNewTags(p.tags);
+    setNewSeasons(p.seasons ?? []);
     setNewFragranticaUrl(p.fragranticaUrl);
     setNewImageUrl(p.imageUrl?.trim() ?? "");
     setFcResults([]);
@@ -226,20 +262,12 @@ export default function Home() {
         return;
       }
       if (!res.ok) {
-        const hint =
-          res.status === 503
-            ? " Set APIFY_TOKEN in .env in the project folder and restart npm run dev."
-            : res.status === 502
-              ? " Apify run failed—check your token/credits. URL import retries once with Apify proxy by default; you can also set APIFY_USE_PROXY=true."
-              : "";
-        setFcError((typeof body.error === "string" ? body.error : "Could not fetch from Apify.") + hint);
+        setFcError(typeof body.error === "string" ? body.error : "Could not fetch fragrance data.");
         return;
       }
       const list = Array.isArray(body.results) ? body.results : [];
       if (list.length === 0) {
-        setFcError(
-          "No perfume data returned. Use a full perfume URL (…/perfume/Brand/Name-12345.html), check APIFY_TOKEN, or try local catalog search."
-        );
+        setFcError("No perfume data returned. Make sure it's a full perfume URL like …/perfume/Brand/Name-12345.html");
         return;
       }
       applyFragranticaPreview(list[0]!);
@@ -252,28 +280,40 @@ export default function Home() {
 
   async function fetchCatalogSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!fcQuery.trim()) return;
+    const q = fcQuery.trim();
+    if (!q) return;
+    if (catalogDebounceRef.current) {
+      clearTimeout(catalogDebounceRef.current);
+      catalogDebounceRef.current = null;
+    }
+    catalogAbortRef.current?.abort();
+    const ac = new AbortController();
+    catalogAbortRef.current = ac;
     setFcLoading(true);
     setFcError(null);
-    setFcResults([]);
     try {
-      const q = encodeURIComponent(fcQuery.trim());
-      const res = await fetch(`/api/fragrances/catalog?q=${q}`);
+      const res = await fetch(`/api/fragrances/catalog?q=${encodeURIComponent(q)}`, { signal: ac.signal });
       const body = (await res.json()) as { results?: FragranticaPreview[]; error?: string };
+      if (ac.signal.aborted) return;
       if (!res.ok) {
         setFcError(typeof body.error === "string" ? body.error : "Search failed.");
+        setFcResults([]);
         return;
       }
       const list = Array.isArray(body.results) ? body.results : [];
+      setFcResults(list);
+      setFcError(null);
       if (list.length === 0) {
         setFcError(
           "No matches in the local catalog. Run npm run db:seed (or add rows to data/catalog.seed.json and seed again)."
         );
-        return;
       }
-      setFcResults(list);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setFcError("Network error.");
+      setFcResults([]);
     } finally {
-      setFcLoading(false);
+      if (!ac.signal.aborted) setFcLoading(false);
     }
   }
 
@@ -290,6 +330,8 @@ export default function Home() {
           name: newName.trim(),
           brand: newBrand.trim(),
           tags: newTags,
+          occasions: newOccasions,
+          seasons: newSeasons,
           notes: newNotes,
           fragranticaUrl: newFragranticaUrl.trim(),
           imageUrl: newImageUrl.trim(),
@@ -303,10 +345,12 @@ export default function Home() {
       setNewName("");
       setNewBrand("");
       setNewTags([]);
+      setNewOccasions([]);
+      setNewSeasons([]);
       setNewNotes("");
       setNewFragranticaUrl("");
       setNewImageUrl("");
-      await load();
+      await load(todayOccasion);
     } catch {
       setAddError("Network error. Try again.");
     } finally {
@@ -316,11 +360,38 @@ export default function Home() {
 
   async function removeFragrance(id: string) {
     await fetch(`/api/fragrances/${id}`, { method: "DELETE" });
-    await load();
+    await load(todayOccasion);
+  }
+
+  async function logWear(id: string) {
+    await fetch(`/api/fragrances/${id}/wear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ occasion: todayOccasion ?? "" }),
+    });
+    // Refresh fragrances list + today pick
+    const fRes = await fetch("/api/fragrances");
+    const fJson = (await fRes.json()) as unknown;
+    setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
+    await loadToday(todayOccasion);
+  }
+
+  async function selectOccasion(o: Occasion | null) {
+    setTodayOccasion(o);
+    setLoading(true);
+    try {
+      await loadToday(o);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function toggleNewTag(t: FragranceTag) {
     setNewTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  }
+
+  function toggleNewOccasion(o: Occasion) {
+    setNewOccasions((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
   }
 
   return (
@@ -333,7 +404,7 @@ export default function Home() {
           <span>{loadError}</span>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void load(todayOccasion)}
             className="shrink-0 rounded-lg bg-amber-200/15 px-3 py-1.5 font-medium text-amber-100 hover:bg-amber-200/25"
           >
             Retry
@@ -342,8 +413,16 @@ export default function Home() {
       ) : null}
       <header className="mb-12 flex flex-col gap-4 border-b border-[var(--border)] pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
-        <p className="text-sm tracking-wide text-[var(--muted)]">Personal scent log</p>
-        <h1 className="font-[family-name:var(--font-fraunces)] text-4xl font-medium tracking-tight text-[var(--text)] sm:text-5xl">
+        <p className="text-sm tracking-wide text-[var(--muted)]">
+          Personal scent log ·{" "}
+          <a
+            href="#collection"
+            className="text-[var(--accent)] underline decoration-[var(--border)] underline-offset-4 hover:decoration-[var(--accent)]"
+          >
+            Collection
+          </a>
+        </p>
+        <h1 className="mt-3 font-[family-name:var(--font-fraunces)] text-4xl font-medium tracking-tight text-[var(--text)] sm:text-5xl">
           Fragrance Wardrobe
         </h1>
         <p className="mt-3 max-w-xl text-[var(--muted)]">
@@ -353,7 +432,7 @@ export default function Home() {
         </div>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void load(todayOccasion)}
           disabled={loading}
           className="self-start rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)] disabled:opacity-50 sm:self-auto"
         >
@@ -362,9 +441,28 @@ export default function Home() {
       </header>
 
       <section className="mb-10 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg shadow-black/20">
-        <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--accent)]">
-          Today
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--accent)]">Today</h2>
+        </div>
+
+        {/* Occasion picker */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {OCCASION_OPTIONS.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => void selectOccasion(todayOccasion === o ? null : o)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                todayOccasion === o
+                  ? "bg-[var(--accent)] text-[var(--bg)]"
+                  : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
+              }`}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+
         {loading && <p className="mt-4 text-[var(--muted)]">Loading…</p>}
         {!loading && today?.ok === false && today.reason === "no_location" && (
           <p className="mt-4 text-[var(--muted)]">{today.message}</p>
@@ -482,10 +580,8 @@ export default function Home() {
           Add a fragrance
         </h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Search uses a <strong className="font-medium text-[var(--text)]">local catalog</strong> in your
-          SQLite database (seeded from <code className="text-xs">data/catalog.seed.json</code> via{" "}
-          <code className="text-xs">npm run db:seed</code>). Paste a Fragrantica perfume URL to fetch live
-          details with Apify if <code className="text-xs">APIFY_TOKEN</code> is set.
+          Paste a Fragrantica perfume URL to auto-fill details — uses a local browser, no API key needed.
+          Or enter manually below.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -576,17 +672,22 @@ export default function Home() {
             ) : (
               <form onSubmit={(e) => void fetchCatalogSearch(e)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="min-w-0 flex-1">
-                  <span className="mb-1 block text-xs text-[var(--muted)]">Search local catalog</span>
+                  <span className="mb-1 block text-xs text-[var(--muted)]">
+                    Search local catalog — results update as you type
+                  </span>
                   <input
                     value={fcQuery}
                     onChange={(e) => setFcQuery(e.target.value)}
                     placeholder="e.g. Sauvage, Chanel, Hermès"
+                    autoComplete="off"
+                    aria-autocomplete="list"
+                    aria-controls="catalog-search-results"
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
                   />
                 </label>
                 <button
                   type="submit"
-                  disabled={fcLoading}
+                  disabled={fcLoading || !fcQuery.trim()}
                   className="rounded-xl bg-[var(--accent)] px-5 py-3 font-medium text-[var(--bg)] hover:opacity-90 disabled:opacity-50"
                 >
                   {fcLoading ? "Searching…" : "Search"}
@@ -600,10 +701,14 @@ export default function Home() {
               </p>
             ) : null}
 
+            {fcMode === "search" && fcQuery.trim().length > 0 && !fcLoading && fcResults.length === 0 && !fcError ? (
+              <p className="text-sm text-[var(--muted)]">No matches for that search.</p>
+            ) : null}
+
             {fcResults.length > 0 && (
-              <div>
+              <div id="catalog-search-results">
                 <p className="mb-2 text-sm text-[var(--muted)]">Pick a result to fill the form:</p>
-                <ul className="max-h-60 space-y-2 overflow-y-auto">
+                <ul className="max-h-60 space-y-2 overflow-y-auto" role="listbox">
                   {fcResults.map((r, i) => (
                     <li key={`${r.fragranticaUrl}-${i}`}>
                       <button
@@ -649,7 +754,7 @@ export default function Home() {
             />
           </div>
           <div>
-            <p className="mb-2 text-sm text-[var(--muted)]">Mood tags</p>
+            <p className="mb-2 text-sm text-[var(--muted)]">Scent tags</p>
             <div className="flex flex-wrap gap-2">
               {TAG_OPTIONS.map((t) => {
                 const on = newTags.includes(t);
@@ -665,6 +770,54 @@ export default function Home() {
                     }`}
                   >
                     {t}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-[var(--muted)]">Occasions</p>
+            <div className="flex flex-wrap gap-2">
+              {OCCASION_OPTIONS.map((o) => {
+                const on = newOccasions.includes(o);
+                return (
+                  <button
+                    key={o}
+                    type="button"
+                    onClick={() => toggleNewOccasion(o)}
+                    className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+                      on
+                        ? "bg-[var(--accent)] text-[var(--bg)]"
+                        : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
+                    }`}
+                  >
+                    {o}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-[var(--muted)]">Seasons</p>
+            <div className="flex flex-wrap gap-2">
+              {SEASON_OPTIONS.map((s) => {
+                const on = newSeasons.includes(s);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() =>
+                      setNewSeasons((prev) =>
+                        prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+                      )
+                    }
+                    className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+                      on
+                        ? "bg-[var(--accent)] text-[var(--bg)]"
+                        : "border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--accent-soft)]"
+                    }`}
+                  >
+                    {s}
                   </button>
                 );
               })}
@@ -705,62 +858,35 @@ export default function Home() {
         </form>
       </section>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+      <section
+        id="collection"
+        className="scroll-mt-8 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6"
+      >
         <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
           Collection ({fragrances.length})
         </h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          Bottles only — click a tile for details and Fragrantica. Use × to remove.
+        </p>
         {fragrances.length === 0 && (
           <p className="mt-4 text-[var(--muted)]">Nothing here yet—add your first bottle above.</p>
         )}
-        <ul className="mt-4 space-y-3">
-          {fragrances.map((f) => {
-            const tags = parseTagsFromJson(f.tags);
-            return (
-              <li
+        {fragrances.length > 0 && (
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
+            {fragrances.map((f) => (
+              <CollectionTile
                 key={f.id}
-                className="flex flex-col gap-3 rounded-xl border border-[var(--border)]/70 bg-transparent px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex min-w-0 flex-1 gap-3">
-                  <BottleThumb src={f.imageUrl ?? ""} label={f.name} size="md" />
-                  <div className="min-w-0">
-                  <span className="font-medium">{f.name}</span>
-                  <span className="text-[var(--muted)]"> · {f.brand}</span>
-                  {tags.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {tags.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {f.notes ? <p className="mt-1 text-sm text-[var(--muted)]">{f.notes}</p> : null}
-                  {f.fragranticaUrl ? (
-                    <a
-                      href={f.fragranticaUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-xs text-[var(--accent)] underline underline-offset-2"
-                    >
-                      View on Fragrantica
-                    </a>
-                  ) : null}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void removeFragrance(f.id)}
-                  className="self-start rounded-lg px-3 py-1.5 text-sm text-red-300/90 hover:bg-red-950/40 sm:self-center"
-                >
-                  Remove
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                id={f.id}
+                imageSrc={f.imageUrl ?? ""}
+                ariaLabel={`Open details: ${f.name} by ${f.brand}`}
+                wearCount={f.wearCount ?? 0}
+                lastWornAt={f.lastWornAt ?? null}
+                onRemove={() => void removeFragrance(f.id)}
+                onWoreToday={() => void logWear(f.id)}
+              />
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
