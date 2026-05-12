@@ -27,8 +27,23 @@ type FragranticaPreview = {
   tags: FragranceTag[];
   seasons: Season[];
   occasions: Occasion[];
+  longevity: string;
   fragranticaUrl: string;
   imageUrl?: string;
+};
+
+type PickShape = {
+  id: string;
+  name: string;
+  brand: string;
+  tags: FragranceTag[];
+  occasions: Occasion[];
+  score: number;
+  notes?: string;
+  imageUrl: string;
+  fragranticaUrl: string;
+  longevity: string;
+  wearStats: { lastWornAt: string | null; wearCount: number };
 };
 
 type TodayPayload =
@@ -45,18 +60,8 @@ type TodayPayload =
       };
       vibe: { label: string };
       selectedOccasion: Occasion | null;
-      pick: {
-        id: string;
-        name: string;
-        brand: string;
-        tags: FragranceTag[];
-        occasions: Occasion[];
-        score: number;
-        notes?: string;
-        imageUrl: string;
-        fragranticaUrl: string;
-        wearStats: { lastWornAt: string | null; wearCount: number };
-      } | null;
+      pick: PickShape | null;
+      secondPick: PickShape | null;
       collectionCount: number;
     }
   | { ok: false; reason: string; message?: string };
@@ -76,6 +81,7 @@ export default function Home() {
   const [newTags, setNewTags] = useState<FragranceTag[]>([]);
   const [newOccasions, setNewOccasions] = useState<Occasion[]>([]);
   const [newSeasons, setNewSeasons] = useState<Season[]>([]);
+  const [newLongevity, setNewLongevity] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newFragranticaUrl, setNewFragranticaUrl] = useState("");
   const [newImageUrl, setNewImageUrl] = useState("");
@@ -232,6 +238,7 @@ export default function Home() {
     setNewTags(p.tags);
     setNewSeasons(p.seasons ?? []);
     setNewOccasions(p.occasions ?? []);
+    setNewLongevity(p.longevity ?? "");
     setNewFragranticaUrl(p.fragranticaUrl);
     setNewImageUrl(p.imageUrl?.trim() ?? "");
     setFcResults([]);
@@ -255,6 +262,7 @@ export default function Home() {
             setNewTags(full.tags);
             setNewSeasons(full.seasons ?? []);
             setNewOccasions(full.occasions ?? []);
+            setNewLongevity(full.longevity ?? "");
             if (full.imageUrl) setNewImageUrl(full.imageUrl);
           }
         })
@@ -278,6 +286,7 @@ export default function Home() {
           tags: newTags,
           occasions: newOccasions,
           seasons: newSeasons,
+          longevity: newLongevity,
           notes: newNotes,
           fragranticaUrl: newFragranticaUrl.trim(),
           imageUrl: newImageUrl.trim(),
@@ -293,6 +302,7 @@ export default function Home() {
       setNewTags([]);
       setNewOccasions([]);
       setNewSeasons([]);
+      setNewLongevity("");
       setNewNotes("");
       setNewFragranticaUrl("");
       setNewImageUrl("");
@@ -422,9 +432,29 @@ export default function Home() {
                           ))}
                         </div>
                       )}
+                      {today.pick.longevity && (
+                        <span className="mt-1 inline-block rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
+                          {today.pick.longevity} longevity
+                        </span>
+                      )}
                       {today.pick.fragranticaUrl && (
                         <a href={today.pick.fragranticaUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[var(--accent)] underline underline-offset-2">Fragrantica ↗</a>
                       )}
+                    </div>
+                  </div>
+                )}
+                {today.secondPick && (
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-xs text-[var(--muted)]">Short longevity — consider also for later:</p>
+                    <div className="flex items-center gap-3 rounded-xl border border-[var(--border)]/50 bg-[var(--surface)]/30 p-2.5">
+                      <BottleThumb src={today.secondPick.imageUrl} label={today.secondPick.name} size="md" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[var(--text)]">{today.secondPick.name}</p>
+                        <p className="truncate text-xs text-[var(--muted)]">{today.secondPick.brand}</p>
+                        {today.secondPick.fragranticaUrl && (
+                          <a href={today.secondPick.fragranticaUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-[var(--accent)] underline underline-offset-2">Fragrantica ↗</a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

@@ -17,6 +17,7 @@ function toPreview(row: {
   notes: string;
   tags: string;
   seasons: string;
+  longevity: string;
   fragranticaUrl: string;
   imageUrl: string;
 }): FragranticaPreview {
@@ -31,6 +32,7 @@ function toPreview(row: {
     notes: row.notes,
     tags,
     seasons,
+    longevity: row.longevity ?? "",
     occasions: inferOccasions(tags, seasons, row.notes),
     fragranticaUrl: row.fragranticaUrl,
     imageUrl,
@@ -54,12 +56,13 @@ export async function GET(request: Request) {
         brand: string;
         tags: string;
         seasons: string;
+        longevity: string;
         notes: string;
         fragranticaUrl: string;
         imageUrl: string;
       }>
     >(Prisma.sql`
-      SELECT "id", "name", "brand", "tags", "seasons", "notes", "fragranticaUrl", "imageUrl"
+      SELECT "id", "name", "brand", "tags", "seasons", "longevity", "notes", "fragranticaUrl", "imageUrl"
       FROM "FragranceCatalog"
       WHERE "name" LIKE ${pattern} COLLATE NOCASE
          OR "brand" LIKE ${pattern} COLLATE NOCASE

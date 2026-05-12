@@ -77,6 +77,7 @@ export async function POST(request: Request) {
     tags?: unknown;
     occasions?: unknown;
     seasons?: unknown;
+    longevity?: string;
     notes?: string;
     fragranticaUrl?: string;
     imageUrl?: string;
@@ -95,6 +96,8 @@ export async function POST(request: Request) {
   const notes = typeof body.notes === "string" ? body.notes : "";
   const fragranticaUrl = typeof body.fragranticaUrl === "string" ? body.fragranticaUrl.trim() : "";
   const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
+  const longevity = typeof body.longevity === "string" && ["short", "moderate", "long"].includes(body.longevity)
+    ? body.longevity : "";
 
   try {
     const row = await prisma.fragrance.create({
@@ -104,6 +107,7 @@ export async function POST(request: Request) {
         tags: normalizeTags(body.tags),
         occasions: normalizeOccasions(body.occasions),
         seasons: normalizeSeasons(body.seasons),
+        longevity,
         notes,
         fragranticaUrl,
         imageUrl,

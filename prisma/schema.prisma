@@ -17,6 +17,7 @@ model Fragrance {
   fragranticaUrl String    @default("")
   imageUrl       String    @default("")
   seasons        String    @default("[]") // JSON: spring|summer|fall|winter
+  longevity      String    @default("") // short | moderate | long
   enrichmentJson String    @default("{}")
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -41,6 +42,7 @@ model FragranceCatalog {
   brand          String
   tags           String   @default("[]")
   seasons        String   @default("[]") // JSON: spring|summer|fall|winter
+  longevity      String   @default("") // short | moderate | long
   notes          String   @default("")
   fragranticaUrl String   @unique
   imageUrl       String   @default("")

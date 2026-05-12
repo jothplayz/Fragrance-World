@@ -107,6 +107,11 @@ function occasionScore(fragranceOccasions: Occasion[], selected: Occasion | null
   return fragranceOccasions.includes(selected) ? 6 : 0;
 }
 
+/** True when a fragrance covers every possible occasion — a true all-rounder */
+function isVersatile(occasions: Occasion[]): boolean {
+  return OCCASION_OPTIONS.every((o) => occasions.includes(o));
+}
+
 export function vibesFromWeather(w: WeatherToday): Vibe[] {
   const vibes: Vibe[] = [tempVibe(w.tempMaxC, w.tempMinC)];
   if (w.precipProbMax >= 45 || isWetCode(w.weatherCode)) vibes.push("wet");
@@ -152,6 +157,19 @@ export function rankFragrances(
   });
 
   rows.sort((a, b) => b.score - a.score);
+
+  // Versatile fragrances (all occasions) cycle to the top, sorted by least recently worn
+  const versatile = rows.filter((r) => isVersatile(r.occasions));
+  if (versatile.length > 0) {
+    versatile.sort((a, b) => {
+      const at = a.wearStats.lastWornAt?.getTime() ?? 0;
+      const bt = b.wearStats.lastWornAt?.getTime() ?? 0;
+      return at - bt;
+    });
+    const rest = rows.filter((r) => !isVersatile(r.occasions));
+    return [...versatile, ...rest];
+  }
+
   return rows;
 }
 

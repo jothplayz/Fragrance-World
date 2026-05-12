@@ -13,6 +13,7 @@ type CatalogRow = {
   notes: string;
   tags: string;
   seasons: string;
+  longevity: string;
   fragranticaUrl: string;
   imageUrl: string;
 };
@@ -80,6 +81,7 @@ function catalogRowToPreview(row: CatalogRow): FragranticaPreview {
   const seasons = parseSeasonsFromJson(row.seasons ?? "[]");
   return {
     name: row.name, brand: row.brand, notes: row.notes, tags, seasons,
+    longevity: row.longevity ?? "",
     occasions: inferOccasions(tags, seasons, row.notes),
     fragranticaUrl: row.fragranticaUrl,
     imageUrl: row.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl),
@@ -95,13 +97,14 @@ export async function GET(request: Request) {
   const safe = q.replace(/[%_]/g, "");
   const pattern = `%${safe}%`;
   const localRows = await prisma.$queryRaw<CatalogRow[]>(Prisma.sql`
-    SELECT "name", "brand", "notes", "tags", "seasons", "fragranticaUrl", "imageUrl"
+    SELECT "name", "brand", "notes", "tags", "seasons", "longevity", "fragranticaUrl", "imageUrl"
     FROM "FragranceCatalog"
     WHERE "name" LIKE ${pattern} COLLATE NOCASE
        OR "brand" LIKE ${pattern} COLLATE NOCASE
     ORDER BY "brand" ASC, "name" ASC
     LIMIT 10
   `).catch(() => [] as CatalogRow[]);
+
 
   if (localRows.length > 0) {
     return NextResponse.json({
@@ -126,7 +129,7 @@ export async function GET(request: Request) {
         ? `https://fimgs.net/mdimg/perfume-thumbs/375x500.${thumbId}.jpg`
         : r.img;
       return {
-        name: r.name, brand: r.brand, notes: "", tags: [], seasons: [], occasions: [],
+        name: r.name, brand: r.brand, notes: "", tags: [], seasons: [], occasions: [], longevity: "",
         fragranticaUrl: canonical, imageUrl,
       };
     });

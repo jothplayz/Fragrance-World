@@ -35,6 +35,7 @@ export function CollectionTile({
 }) {
   const [failed, setFailed] = useState(false);
   const [logging, setLogging] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const safe = safeImageSrc(imageSrc);
 
   useEffect(() => {
@@ -92,16 +93,37 @@ export function CollectionTile({
         )}
       </Link>
 
-      {/* Remove button */}
+      {/* Remove button — two-step confirm */}
       {onRemove ? (
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
-          className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]/95 text-sm text-red-300/95 shadow-md backdrop-blur-sm hover:bg-red-950/50"
-          aria-label="Remove from collection"
-        >
-          ×
-        </button>
+        confirmRemove ? (
+          <div className="absolute right-1 top-1 z-10 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
+              className="flex h-7 items-center rounded-lg border border-red-500/60 bg-red-950/80 px-2 text-xs font-medium text-red-300 shadow-md backdrop-blur-sm hover:bg-red-900/80"
+              aria-label="Confirm remove"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmRemove(false); }}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]/95 text-xs text-[var(--muted)] shadow-md backdrop-blur-sm hover:text-[var(--text)]"
+              aria-label="Cancel remove"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmRemove(true); }}
+            className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]/95 text-sm text-red-300/95 shadow-md backdrop-blur-sm hover:bg-red-950/50"
+            aria-label="Remove from collection"
+          >
+            ×
+          </button>
+        )
       ) : null}
 
       {/* Wore today button */}

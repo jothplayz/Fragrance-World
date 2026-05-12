@@ -20,12 +20,12 @@ function catalogToPreview(row: {
   notes: string;
   tags: string;
   seasons: string;
+  longevity: string;
   fragranticaUrl: string;
   imageUrl: string;
 }): FragranticaPreview {
   const imageUrl = row.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(row.fragranticaUrl);
   const stored = parseTagsFromJson(row.tags);
-  // Backfill tags for cache entries saved before tag inference was added
   const tags = stored.length > 0 ? stored : inferTagsFromNotes(row.notes);
   const seasons = parseSeasonsFromJson(row.seasons);
   return {
@@ -34,6 +34,7 @@ function catalogToPreview(row: {
     notes: row.notes,
     tags,
     seasons,
+    longevity: row.longevity ?? "",
     occasions: inferOccasions(tags, seasons, row.notes),
     fragranticaUrl: row.fragranticaUrl,
     imageUrl,
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
         notes: preview.notes,
         tags: JSON.stringify(preview.tags),
         seasons: JSON.stringify(preview.seasons),
+        longevity: preview.longevity,
         fragranticaUrl: canonical,
         imageUrl: preview.imageUrl,
       },
@@ -109,6 +111,7 @@ export async function POST(request: Request) {
         notes: preview.notes,
         tags: JSON.stringify(preview.tags),
         seasons: JSON.stringify(preview.seasons),
+        longevity: preview.longevity,
         imageUrl: preview.imageUrl,
       },
     }).catch(() => { /* non-fatal */ });

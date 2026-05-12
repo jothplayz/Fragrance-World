@@ -11,6 +11,7 @@ export type FragranticaPreview = {
   tags: FragranceTag[];
   seasons: string[];
   occasions: string[];
+  longevity: string;
   fragranticaUrl: string;
   imageUrl: string;
 };
@@ -224,6 +225,7 @@ export function mapFragranticaItem(item: Record<string, unknown>): FragranticaPr
     tags,
     seasons: [],
     occasions: [],
+    longevity: "",
     fragranticaUrl: url,
     imageUrl,
   };

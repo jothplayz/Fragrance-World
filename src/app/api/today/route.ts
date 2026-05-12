@@ -67,6 +67,29 @@ export async function GET(request: Request) {
       (best.fragrance.imageUrl?.trim() ||
         imageUrlFromFragranticaPerfumeUrl(best.fragrance.fragranticaUrl));
 
+    const isShortLongevity = (best?.fragrance as { longevity?: string } | undefined)?.longevity === "short";
+    const second = isShortLongevity ? ranked[1] : null;
+    const secondImage =
+      second &&
+      (second.fragrance.imageUrl?.trim() ||
+        imageUrlFromFragranticaPerfumeUrl(second.fragrance.fragranticaUrl));
+
+    function pickShape(row: (typeof ranked)[0], img: string | null | undefined) {
+      return {
+        id: row.fragrance.id,
+        name: row.fragrance.name,
+        brand: row.fragrance.brand,
+        tags: row.tags,
+        occasions: row.occasions,
+        score: row.score,
+        notes: row.fragrance.notes,
+        imageUrl: img ?? "",
+        fragranticaUrl: row.fragrance.fragranticaUrl ?? "",
+        longevity: (row.fragrance as { longevity?: string }).longevity ?? "",
+        wearStats: row.wearStats,
+      };
+    }
+
     return NextResponse.json({
       ok: true,
       location: {
@@ -88,20 +111,8 @@ export async function GET(request: Request) {
         label: humanVibeLabel(vibes),
       },
       selectedOccasion,
-      pick: best
-        ? {
-            id: best.fragrance.id,
-            name: best.fragrance.name,
-            brand: best.fragrance.brand,
-            tags: best.tags,
-            occasions: best.occasions,
-            score: best.score,
-            notes: best.fragrance.notes,
-            imageUrl: pickImage ?? "",
-            fragranticaUrl: best.fragrance.fragranticaUrl ?? "",
-            wearStats: best.wearStats,
-          }
-        : null,
+      pick: best ? pickShape(best, pickImage) : null,
+      secondPick: second ? pickShape(second, secondImage) : null,
       collectionCount: fragrances.length,
     });
   } catch (e) {

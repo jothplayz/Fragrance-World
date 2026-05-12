@@ -59,6 +59,30 @@ function extractFromJsonLd(jsonLd: Array<Record<string, unknown>>) {
   return { name: "", brand: "", imageUrl: "" };
 }
 
+function extractLongevity(html: string): "short" | "moderate" | "long" | "" {
+  const levels = [
+    { label: "poor", tier: 1 },
+    { label: "weak", tier: 2 },
+    { label: "moderate", tier: 3 },
+    { label: "long lasting", tier: 4 },
+    { label: "eternal", tier: 5 },
+  ] as const;
+  let bestPct = 0;
+  let bestTier = 0;
+  for (const { label, tier } of levels) {
+    const re = new RegExp(`>${label}</span>[\\s\\S]{0,400}?width:\\s*([\\d.]+)%`, "i");
+    const m = html.match(re);
+    if (m) {
+      const pct = parseFloat(m[1]!);
+      if (pct > bestPct) { bestPct = pct; bestTier = tier; }
+    }
+  }
+  if (bestPct === 0) return "";
+  if (bestTier <= 2) return "short";
+  if (bestTier === 3) return "moderate";
+  return "long";
+}
+
 function extractSeasons(html: string): Season[] {
   const scores: Record<Season, number> = { spring: 0, summer: 0, fall: 0, winter: 0 };
   for (const season of SEASON_OPTIONS) {
@@ -145,10 +169,11 @@ function htmlToPreview(html: string, canonicalUrl: string): FragranticaPreview {
   if (!name || !brand) throw new Error("SCRAPE_FAILED_MISSING_NAME_OR_BRAND");
 
   const seasons = extractSeasons(html);
+  const longevity = extractLongevity(html);
   const tags = inferTags(html, notes);
   const occasions = inferOccasions(tags, seasons, notes);
 
-  return { name, brand, notes, tags, seasons, occasions, fragranticaUrl: canonicalUrl, imageUrl };
+  return { name, brand, notes, tags, seasons, longevity, occasions, fragranticaUrl: canonicalUrl, imageUrl };
 }
 
 export async function scrapeFragranticaUrl(url: string): Promise<FragranticaPreview> {
