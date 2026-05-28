@@ -64,12 +64,15 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(today);
 
-  // Log-past-wear state
+  // Log-past-wear / edit state
   const [fragrances, setFragrances] = useState<FragranceRow[]>([]);
   const [logging, setLogging] = useState(false);
   const [logFragId, setLogFragId] = useState("");
   const [logOccasion, setLogOccasion] = useState<Occasion | "">("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  // editing: logId → { fragranceId, occasion }
+  const [editing, setEditing] = useState<Record<string, { fragranceId: string; occasion: string }>>({});
+  const [saving, setSaving] = useState<string | null>(null);
 
   const load = useCallback(async (y: number, m: number) => {
     setLoading(true);
@@ -118,6 +121,28 @@ export default function HistoryPage() {
     setDeleting(logId);
     await fetch(`/api/history?logId=${encodeURIComponent(logId)}`, { method: "DELETE" });
     setDeleting(null);
+    await load(year, month);
+  }
+
+  function startEdit(e: WearEntry) {
+    setEditing(prev => ({ ...prev, [e.logId]: { fragranceId: e.fragrance.id, occasion: e.occasion } }));
+  }
+
+  function cancelEdit(logId: string) {
+    setEditing(prev => { const n = { ...prev }; delete n[logId]; return n; });
+  }
+
+  async function saveEdit(logId: string) {
+    const draft = editing[logId];
+    if (!draft) return;
+    setSaving(logId);
+    await fetch("/api/history", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logId, fragranceId: draft.fragranceId, occasion: draft.occasion }),
+    });
+    setSaving(null);
+    cancelEdit(logId);
     await load(year, month);
   }
 
@@ -227,37 +252,99 @@ export default function HistoryPage() {
             <p className="mb-4 text-sm text-[var(--muted)]">Nothing logged for this day.</p>
           ) : (
             <ul className="mb-4 space-y-2">
-              {selectedEntries.map(e => (
-                <li key={e.logId} className="flex items-center gap-3 rounded-xl border border-[var(--border)]/60 bg-[var(--bg)]/50 p-3">
-                  <div className="relative h-12 w-8 shrink-0">
-                    {safeImageSrc(e.fragrance.imageUrl) ? (
-                      <Image src={safeImageSrc(e.fragrance.imageUrl)} alt={e.fragrance.name} fill sizes="32px" className="object-contain object-bottom" />
-                    ) : (
-                      <div className="h-full w-full rounded bg-[var(--surface)] flex items-center justify-center text-xs text-[var(--muted)]">?</div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/collection/${e.fragrance.id}`} className="block truncate text-sm font-medium text-[var(--text)] hover:text-[var(--accent)]">
-                      {e.fragrance.name}
-                    </Link>
-                    <p className="truncate text-xs text-[var(--muted)]">{e.fragrance.brand}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      {e.occasion && (
-                        <span className="rounded-full bg-[var(--accent-soft)]/25 px-2 py-0.5 text-[10px] text-[var(--accent)]">{e.occasion}</span>
+              {selectedEntries.map(e => {
+                const draft = editing[e.logId];
+                const isEditing = !!draft;
+
+                if (isEditing) {
+                  const editFragrance = fragrances.find(f => f.id === draft.fragranceId);
+                  return (
+                    <li key={e.logId} className="rounded-xl border border-[var(--accent)]/40 bg-[var(--bg)]/60 p-3 space-y-2">
+                      <p className="text-[10px] text-[var(--muted)]">{isoToLocalTime(e.wornAt)}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <select
+                          value={draft.fragranceId}
+                          onChange={ev => setEditing(prev => ({ ...prev, [e.logId]: { ...prev[e.logId], fragranceId: ev.target.value } }))}
+                          className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+                        >
+                          {fragrances.map(f => (
+                            <option key={f.id} value={f.id}>{f.name} — {f.brand}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={draft.occasion}
+                          onChange={ev => setEditing(prev => ({ ...prev, [e.logId]: { ...prev[e.logId], occasion: ev.target.value } }))}
+                          className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+                        >
+                          <option value="">No occasion</option>
+                          {OCCASION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      {editFragrance && (
+                        <p className="text-xs text-[var(--muted)]">
+                          Affects recommendations — last worn will update to this date.
+                        </p>
                       )}
-                      <span className="text-[10px] text-[var(--muted)]">{isoToLocalTime(e.wornAt)}</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => void saveEdit(e.logId)}
+                          disabled={saving === e.logId}
+                          className="rounded-lg border border-[var(--accent)]/50 bg-[var(--accent)]/10 px-3 py-1.5 text-xs text-[var(--accent)] hover:bg-[var(--accent)]/20 disabled:opacity-40"
+                        >
+                          {saving === e.logId ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={() => cancelEdit(e.logId)}
+                          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--text)]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li key={e.logId} className="flex items-center gap-3 rounded-xl border border-[var(--border)]/60 bg-[var(--bg)]/50 p-3">
+                    <div className="relative h-12 w-8 shrink-0">
+                      {safeImageSrc(e.fragrance.imageUrl) ? (
+                        <Image src={safeImageSrc(e.fragrance.imageUrl)} alt={e.fragrance.name} fill sizes="32px" className="object-contain object-bottom" />
+                      ) : (
+                        <div className="h-full w-full rounded bg-[var(--surface)] flex items-center justify-center text-xs text-[var(--muted)]">?</div>
+                      )}
                     </div>
-                  </div>
-                  <button
-                    onClick={() => void deleteEntry(e.logId)}
-                    disabled={deleting === e.logId}
-                    className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
-                    title="Remove this log entry"
-                  >
-                    {deleting === e.logId ? "…" : "×"}
-                  </button>
-                </li>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/collection/${e.fragrance.id}`} className="block truncate text-sm font-medium text-[var(--text)] hover:text-[var(--accent)]">
+                        {e.fragrance.name}
+                      </Link>
+                      <p className="truncate text-xs text-[var(--muted)]">{e.fragrance.brand}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {e.occasion && (
+                          <span className="rounded-full bg-[var(--accent-soft)]/25 px-2 py-0.5 text-[10px] text-[var(--accent)]">{e.occasion}</span>
+                        )}
+                        <span className="text-[10px] text-[var(--muted)]">{isoToLocalTime(e.wornAt)}</span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        onClick={() => startEdit(e)}
+                        className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]"
+                        title="Edit this entry"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        onClick={() => void deleteEntry(e.logId)}
+                        disabled={deleting === e.logId}
+                        className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
+                        title="Remove this entry"
+                      >
+                        {deleting === e.logId ? "…" : "×"}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
 

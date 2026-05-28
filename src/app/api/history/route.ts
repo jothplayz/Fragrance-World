@@ -96,6 +96,35 @@ export async function POST(request: Request) {
   }
 }
 
+// PATCH: update fragrance or occasion on an existing log entry
+export async function PATCH(request: Request) {
+  try {
+    const body = (await request.json()) as { logId?: string; fragranceId?: string; occasion?: string };
+    const { logId, fragranceId, occasion } = body;
+    if (!logId) return NextResponse.json({ error: "logId required" }, { status: 400 });
+
+    const existing = await prisma.wearLog.findUnique({ where: { id: logId } });
+    if (!existing) return NextResponse.json({ error: "Log entry not found" }, { status: 404 });
+
+    if (fragranceId && fragranceId !== existing.fragranceId) {
+      const frag = await prisma.fragrance.findUnique({ where: { id: fragranceId } });
+      if (!frag) return NextResponse.json({ error: "Fragrance not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.wearLog.update({
+      where: { id: logId },
+      data: {
+        ...(fragranceId ? { fragranceId } : {}),
+        ...(occasion !== undefined ? { occasion } : {}),
+      },
+    });
+    return NextResponse.json(updated);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : "Database error";
+    return NextResponse.json({ error }, { status: 500 });
+  }
+}
+
 // DELETE: remove a specific wear log entry
 export async function DELETE(request: Request) {
   try {
