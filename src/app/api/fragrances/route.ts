@@ -41,24 +41,34 @@ function normalizeSeasons(input: unknown): string {
 
 export async function GET() {
   try {
-    const raw = await prisma.fragrance.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: { select: { wearLogs: true } },
-        wearLogs: {
-          orderBy: { wornAt: "desc" },
-          take: 1,
-          select: { wornAt: true },
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const [raw, recentGroups] = await Promise.all([
+      prisma.fragrance.findMany({
+        orderBy: { createdAt: "desc" },
+        include: {
+          _count: { select: { wearLogs: true } },
+          wearLogs: {
+            orderBy: { wornAt: "desc" },
+            take: 1,
+            select: { wornAt: true },
+          },
         },
-      },
-    });
+      }),
+      prisma.wearLog.groupBy({
+        by: ["fragranceId"],
+        where: { wornAt: { gte: ninetyDaysAgo } },
+        _count: { id: true },
+      }),
+    ]);
+
+    const recentMap = new Map(recentGroups.map((r) => [r.fragranceId, r._count.id]));
 
     const list = raw.map((f) => ({
       ...f,
       imageUrl: f.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(f.fragranticaUrl),
       wearCount: f._count.wearLogs,
+      recentWearCount: recentMap.get(f.id) ?? 0,
       lastWornAt: f.wearLogs[0]?.wornAt?.toISOString() ?? null,
-      // strip internal prisma relations from response
       _count: undefined,
       wearLogs: undefined,
     }));

@@ -62,10 +62,10 @@ export default async function WardrobePage() {
           ← Home
         </Link>
         <Link
-          href="/layer"
+          href="/history"
           className="text-sm text-[var(--muted)] underline decoration-[var(--border)] underline-offset-4 hover:text-[var(--text)]"
         >
-          Layering →
+          History →
         </Link>
       </nav>
 

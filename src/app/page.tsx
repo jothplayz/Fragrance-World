@@ -19,6 +19,7 @@ type FragranceRow = {
   fragranticaUrl: string;
   imageUrl?: string;
   wearCount: number;
+  recentWearCount: number;
   lastWornAt: string | null;
 };
 
@@ -408,10 +409,6 @@ export default function Home() {
               <h2 className="text-xs text-[var(--accent)]">Today&apos;s pick</h2>
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/layer"
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
-                Layer
-              </Link>
               <Link href="/wardrobe"
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
                 Wardrobe
@@ -560,6 +557,33 @@ export default function Home() {
 
       {/* ══ RIGHT HALF: Collection ══ */}
       <div className="flex flex-1 flex-col overflow-hidden p-5 lg:w-1/2 lg:p-6">
+
+        {/* ── Favorites lately ── */}
+        {(() => {
+          const favorites = fragrances
+            .filter(f => f.recentWearCount > 0)
+            .sort((a, b) => b.recentWearCount - a.recentWearCount)
+            .slice(0, 6);
+          if (favorites.length === 0) return null;
+          return (
+            <div className="mb-5 shrink-0">
+              <h2 className="mb-2.5 font-[family-name:var(--font-fraunces)] text-base text-[var(--text)]">
+                Favorites lately
+              </h2>
+              <div className="flex gap-2.5 overflow-x-auto pb-1">
+                {favorites.map(f => (
+                  <Link key={f.id} href={`/collection/${f.id}`}
+                    className="group shrink-0 flex flex-col items-center gap-1 rounded-xl border border-[var(--border)]/60 bg-[var(--surface)]/50 px-2.5 py-2.5 hover:border-[var(--accent)]/60 transition-colors">
+                    <BottleThumb src={f.imageUrl ?? ""} label={f.name} size="sm" />
+                    <span className="max-w-[64px] truncate text-center text-[10px] text-[var(--muted)] group-hover:text-[var(--text)]">{f.name}</span>
+                    <span className="rounded-full bg-[var(--accent-soft)]/25 px-1.5 py-0.5 text-[9px] font-medium text-[var(--accent)]">{f.recentWearCount}×</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <h2 className="mb-4 shrink-0 font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
           Collection <span className="text-[var(--muted)]">({fragrances.length})</span>
         </h2>
