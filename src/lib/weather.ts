@@ -17,6 +17,18 @@ export type WeatherToday = {
 const GEO = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST = "https://api.open-meteo.com/v1/forecast";
 
+// Module-level cache — persists for the lifetime of the Node process.
+// Keyed by "lat,lon,date" so it auto-invalidates at midnight.
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+type WeatherCache = { data: WeatherToday[]; fetchedAt: number; key: string };
+let _weatherCache: WeatherCache | null = null;
+let _inflight: Promise<WeatherToday[]> | null = null; // dedup concurrent cold-cache requests
+
+function _cacheKey(lat: number, lon: number) {
+  const today = new Date().toISOString().slice(0, 10);
+  return `${lat.toFixed(3)},${lon.toFixed(3)},${today}`;
+}
+
 const US_STATE_CODES = new Set(
   "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(
     /\s+/
@@ -112,16 +124,13 @@ export async function geocodeCity(query: string): Promise<GeocodeResult | null> 
   return null;
 }
 
-export async function fetchTodayWeather(
-  latitude: number,
-  longitude: number
-): Promise<WeatherToday> {
+async function _fetchWeekRaw(latitude: number, longitude: number): Promise<WeatherToday[]> {
   const url = new URL(FORECAST);
   url.searchParams.set("latitude", String(latitude));
   url.searchParams.set("longitude", String(longitude));
   url.searchParams.set("daily", "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code");
   url.searchParams.set("timezone", "auto");
-  url.searchParams.set("forecast_days", "1");
+  url.searchParams.set("forecast_days", "7");
 
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) throw new Error(`Weather failed: ${res.status}`);
@@ -138,17 +147,42 @@ export async function fetchTodayWeather(
   };
 
   const daily = data.daily;
-  if (!daily?.time?.[0]) throw new Error("Unexpected weather response");
+  if (!daily?.time?.length) throw new Error("Unexpected weather response");
 
-  const i = 0;
-  return {
-    date: daily.time[i],
+  return daily.time.map((date, i) => ({
+    date,
     tempMaxC: daily.temperature_2m_max[i],
     tempMinC: daily.temperature_2m_min[i],
     precipProbMax: daily.precipitation_probability_max[i] ?? 0,
     weatherCode: daily.weather_code[i],
     timezone: data.timezone ?? "auto",
-  };
+  }));
+}
+
+async function _getWeekCached(latitude: number, longitude: number): Promise<WeatherToday[]> {
+  const key = _cacheKey(latitude, longitude);
+  const now = Date.now();
+  if (_weatherCache && _weatherCache.key === key && now - _weatherCache.fetchedAt < CACHE_TTL_MS) {
+    return _weatherCache.data;
+  }
+  // Deduplicate: if another request is already fetching, reuse its promise.
+  if (!_inflight) {
+    _inflight = _fetchWeekRaw(latitude, longitude)
+      .then((data) => { _weatherCache = { data, fetchedAt: Date.now(), key }; return data; })
+      .finally(() => { _inflight = null; });
+  }
+  return _inflight;
+}
+
+export async function fetchTodayWeather(latitude: number, longitude: number): Promise<WeatherToday> {
+  const days = await _getWeekCached(latitude, longitude);
+  const first = days[0];
+  if (!first) throw new Error("Unexpected weather response");
+  return first;
+}
+
+export async function fetchWeekWeather(latitude: number, longitude: number): Promise<WeatherToday[]> {
+  return _getWeekCached(latitude, longitude);
 }
 
 /** Rough WMO: rain/drizzle/snow codes */

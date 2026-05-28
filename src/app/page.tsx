@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BottleThumb } from "@/components/BottleThumb";
 import { CollectionTile } from "@/components/CollectionTile";
 import { TAG_OPTIONS, type FragranceTag } from "@/lib/tag-options";
 import { OCCASION_OPTIONS, type Occasion } from "@/lib/occasion-options";
 import { SEASON_OPTIONS, type Season } from "@/lib/season-options";
+import type { WeekDayPick, WeeklyPayload } from "@/app/api/weekly/route";
 
 type FragranceRow = {
   id: string;
@@ -95,6 +97,8 @@ export default function Home() {
   const [fcEnriching, setFcEnriching] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCityModal, setShowCityModal] = useState(false);
+  const [weekDays, setWeekDays] = useState<WeekDayPick[]>([]);
+  const [weekLoading, setWeekLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -116,19 +120,35 @@ export default function Home() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [fRes, sRes] = await Promise.all([
+      setWeekLoading(true);
+      const qs = occasion ? `?occasion=${occasion}` : "";
+      // Fire all four requests simultaneously — weather cache deduplicates the
+      // Open-Meteo call so today + weekly share one network round-trip.
+      const [fRes, sRes, wRes, tRes] = await Promise.all([
         fetch("/api/fragrances"),
         fetch("/api/settings"),
+        fetch("/api/weekly"),
+        fetch(`/api/today${qs}`),
       ]);
-      const fJson = (await fRes.json()) as unknown;
-      const sJson = (await sRes.json()) as { cityQuery?: string; displayName?: string };
+      const [fJson, sJson, wJson, tJson] = await Promise.all([
+        fRes.json() as Promise<unknown>,
+        sRes.json() as Promise<{ cityQuery?: string; displayName?: string }>,
+        wRes.json() as Promise<WeeklyPayload>,
+        tRes.json() as Promise<TodayPayload>,
+      ]);
       setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
+      setWeekDays(wJson.ok ? wJson.days : []);
+      setWeekLoading(false);
       setCityQuery(typeof sJson.cityQuery === "string" ? sJson.cityQuery : "");
       setSavedCity(
         (typeof sJson.displayName === "string" ? sJson.displayName : "") ||
           (typeof sJson.cityQuery === "string" ? sJson.cityQuery : "")
       );
-      await loadToday(occasion);
+      if (tJson && typeof tJson === "object" && "ok" in tJson) {
+        setToday(tJson);
+      } else {
+        setToday({ ok: false, reason: "server_error", message: "Unexpected response from /api/today." });
+      }
       if (!fRes.ok && !Array.isArray(fJson)) {
         const err = fJson as { error?: string };
         setLoadError(typeof err.error === "string" ? err.error : "Could not load your collection.");
@@ -139,7 +159,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [loadToday]);
+  }, []);
 
   useEffect(() => {
     void load(null);
@@ -326,11 +346,11 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ occasion: todayOccasion ?? "" }),
     });
-    // Refresh fragrances list + today pick
+    // Only refresh the collection list — don't re-rank today's pick,
+    // since the worn fragrance would get a recency penalty and flip to something else.
     const fRes = await fetch("/api/fragrances");
     const fJson = (await fRes.json()) as unknown;
     setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
-    await loadToday(todayOccasion);
   }
 
   async function selectOccasion(o: Occasion | null) {
@@ -349,6 +369,19 @@ export default function Home() {
 
   function toggleNewOccasion(o: Occasion) {
     setNewOccasions((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
+  }
+
+  function weatherEmoji(code: number, precip: number): string {
+    if (code === 0) return "☀️";
+    if (code <= 2) return "⛅";
+    if (code <= 3) return "☁️";
+    if (code >= 51 && code <= 55) return "🌦️";
+    if (code >= 61 && code <= 65) return "🌧️";
+    if (code >= 71 && code <= 77) return "❄️";
+    if (code >= 80 && code <= 82) return "🌦️";
+    if (code >= 95) return "⛈️";
+    if (precip >= 50) return "🌧️";
+    return "🌤️";
   }
 
   const Spinner = () => (
@@ -375,6 +408,22 @@ export default function Home() {
               <h2 className="text-xs text-[var(--accent)]">Today&apos;s pick</h2>
             </div>
             <div className="flex items-center gap-2">
+              <Link href="/layer"
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
+                Layer
+              </Link>
+              <Link href="/wardrobe"
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
+                Wardrobe
+              </Link>
+              <Link href="/history"
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
+                History
+              </Link>
+              <button type="button" onClick={() => setShowModal(true)}
+                className="rounded-lg border border-[var(--accent)]/50 bg-[var(--accent)]/10 px-2.5 py-1.5 text-xs text-[var(--accent)] hover:bg-[var(--accent)]/20">
+                + Add
+              </button>
               <button type="button" onClick={() => setShowCityModal(true)}
                 title={`City: ${savedCity || "not set"}`}
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
@@ -463,49 +512,49 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── BOTTOM QUARTER: Add a fragrance ── */}
+        {/* ── BOTTOM QUARTER: This Week ── */}
         <section className="flex flex-1 flex-col overflow-hidden p-5 lg:p-6">
-          <h2 className="mb-3 shrink-0 font-[family-name:var(--font-fraunces)] text-base text-[var(--text)]">Add a fragrance</h2>
-          <div className="flex shrink-0 flex-col gap-2">
-            <label className="block">
-              <span className="mb-1 block text-xs text-[var(--muted)]">{fcLoading ? "Searching…" : "Search by name"}</span>
-              <input value={fcQuery} onChange={(e) => setFcQuery(e.target.value)}
-                placeholder="e.g. Sauvage, Chanel No.5"
-                autoComplete="off" aria-autocomplete="list" aria-controls="catalog-search-results"
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
-            </label>
-            {fcLoading && (
-              <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-                <Spinner />
-                {fcSearchSource === null ? "Searching Fragrantica…" : "Loading…"}
-              </div>
+          <div className="mb-3 flex shrink-0 items-center justify-between">
+            <h2 className="font-[family-name:var(--font-fraunces)] text-base text-[var(--text)]">This Week</h2>
+            <Link href="/weekly" className="text-xs text-[var(--muted)] hover:text-[var(--accent)]">See full view →</Link>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {weekLoading && <p className="text-xs text-[var(--muted)]">Loading…</p>}
+            {!weekLoading && weekDays.length === 0 && (
+              <p className="text-xs text-[var(--muted)]">Set your city to see weekly picks.</p>
             )}
-            {fcError ? <p className="text-xs text-amber-200/90" role="alert">{fcError}</p> : null}
-            {fcQuery.trim().length > 0 && !fcLoading && fcResults.length === 0 && !fcError && (
-              <p className="text-xs text-[var(--muted)]">No matches found.</p>
+            {!weekLoading && weekDays.length > 0 && (
+              <ul className="space-y-1.5">
+                {weekDays.filter((day) => day.date !== new Date().toISOString().slice(0, 10)).map((day) => {
+                  const d = new Date(day.date + "T12:00:00");
+                  const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+                  const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  return (
+                    <li key={day.date}
+                      className="flex items-center gap-2.5 rounded-xl border border-[var(--border)]/60 bg-[var(--bg)]/40 px-2.5 py-2">
+                      <div className="w-10 shrink-0 text-center">
+                        <p className="text-[11px] font-semibold text-[var(--text)]">{dayName}</p>
+                        <p className="text-[10px] text-[var(--muted)]">{dateLabel}</p>
+                      </div>
+                      <span className="text-lg shrink-0">{weatherEmoji(day.weather.weatherCode, day.weather.precipProbMax)}</span>
+                      <span className="shrink-0 text-[11px] text-[var(--muted)]">{day.weather.tempMaxF}°</span>
+                      {day.pick ? (
+                        <>
+                          <BottleThumb src={day.pick.imageUrl} label={day.pick.name} size="sm" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-xs font-medium text-[var(--text)]">{day.pick.name}</span>
+                            <span className="block truncate text-[10px] text-[var(--muted)]">{day.pick.brand}</span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-[var(--muted)]">No pick</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
-          {fcResults.length > 0 && (
-            <div id="catalog-search-results" className="mt-2 min-h-0 flex-1 overflow-y-auto">
-              <p className="mb-1.5 text-xs text-[var(--muted)]">
-                {fcSearchSource === "fragrantica" ? "From Fragrantica — click to import:" : "Click to fill form:"}
-              </p>
-              <ul className="space-y-1.5" role="listbox">
-                {fcResults.map((r, i) => (
-                  <li key={`${r.fragranticaUrl}-${i}`}>
-                    <button type="button" onClick={() => applyFragranticaPreview(r)}
-                      className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--border)]/70 bg-[var(--bg)]/60 px-2.5 py-2 text-left text-sm hover:border-[var(--accent)]/80">
-                      <BottleThumb src={r.imageUrl ?? ""} label={r.name} size="sm" />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-[var(--text)]">{r.name}</span>
-                        <span className="block truncate text-xs text-[var(--muted)]">{r.brand}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </section>
       </div>
 
@@ -567,6 +616,35 @@ export default function Home() {
               <h2 className="font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">Add to collection</h2>
               <button type="button" onClick={() => setShowModal(false)} disabled={fcEnriching} className="rounded-lg p-1.5 text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-40">✕</button>
             </div>
+
+            {/* Search */}
+            <div className="mb-4 flex flex-col gap-2">
+              <input value={fcQuery} onChange={(e) => setFcQuery(e.target.value)}
+                placeholder="Search Fragrantica — e.g. Sauvage, Chanel No.5"
+                autoComplete="off"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
+              {fcLoading && (
+                <div className="flex items-center gap-2 text-xs text-[var(--muted)]"><Spinner /> Searching…</div>
+              )}
+              {fcError ? <p className="text-xs text-amber-200/90">{fcError}</p> : null}
+              {fcResults.length > 0 && (
+                <ul className="space-y-1" role="listbox">
+                  {fcResults.map((r, i) => (
+                    <li key={`${r.fragranticaUrl}-${i}`}>
+                      <button type="button" onClick={() => applyFragranticaPreview(r)}
+                        className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--border)]/70 bg-[var(--bg)]/60 px-2.5 py-2 text-left text-sm hover:border-[var(--accent)]/80">
+                        <BottleThumb src={r.imageUrl ?? ""} label={r.name} size="sm" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-[var(--text)]">{r.name}</span>
+                          <span className="block truncate text-xs text-[var(--muted)]">{r.brand}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {newImageUrl.trim() ? (
               <div className="mb-4 flex items-center gap-4 rounded-2xl border border-[var(--border)]/60 p-3">
                 <BottleThumb src={newImageUrl} label={newName || "Preview"} size="md" />

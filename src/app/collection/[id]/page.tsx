@@ -13,6 +13,7 @@ import {
 import { parseFragranceDescription } from "@/lib/parse-fragrance-notes";
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
+import { findSimilarFragrances } from "@/lib/fragrance-similarity";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,11 @@ export default async function CollectionDetailPage({ params }: Props) {
   const parseInput = buildTextForFragranceParsing(f.notes, f.enrichmentJson);
   const parsed = parseFragranceDescription(parseInput);
   const notesForDisplay = f.notes.trim() || enrichment.bodyText.trim();
+
+  const allFragrances = await prisma.fragrance.findMany({
+    select: { id: true, name: true, brand: true, tags: true, notes: true, seasons: true, imageUrl: true, fragranticaUrl: true },
+  });
+  const similar = findSimilarFragrances(f, allFragrances);
 
   return (
     <main className="relative z-10 mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -107,6 +113,47 @@ export default async function CollectionDetailPage({ params }: Props) {
       <div className="mt-10">
         <ExpandableNotes full={notesForDisplay} />
       </div>
+
+      {similar.length > 0 && (
+        <div className="mt-10">
+          <h2 className="mb-4 font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
+            Similar in your collection
+          </h2>
+          <ul className="space-y-2">
+            {similar.map(({ fragrance: s, sharedTags, sharedNotes }) => {
+              const sImg = s.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(s.fragranticaUrl ?? "");
+              return (
+                <li key={s.id}>
+                  <Link
+                    href={`/collection/${s.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/50 p-3 hover:border-[var(--accent)]/60 transition-colors"
+                  >
+                    <BottleThumb src={sImg} label={s.name} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[var(--text)]">{s.name}</p>
+                      <p className="truncate text-xs text-[var(--muted)]">{s.brand}</p>
+                      {sharedTags.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {sharedTags.map((t) => (
+                            <span key={t} className="rounded-full bg-[var(--accent-soft)]/20 px-2 py-0.5 text-[10px] text-[var(--accent)]">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {sharedNotes.length > 0 && (
+                        <p className="mt-1 text-[10px] text-[var(--muted)]">
+                          Shares: {sharedNotes.slice(0, 4).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {f.fragranticaUrl ? (
         <div className="mt-12 flex flex-col items-center gap-4 border-t border-[var(--border)] pt-10 sm:items-start">

@@ -16,8 +16,8 @@ export function BottleThumb({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const widthClass =
-    size === "sm" ? "w-11 sm:w-12" : size === "lg" ? "w-[9rem] sm:w-44" : "w-[4.5rem] sm:w-[5.25rem]";
-  const sizesAttr = size === "sm" ? "48px" : size === "lg" ? "(max-width:640px) 144px, 176px" : "84px";
+    size === "sm" ? "w-11 sm:w-12" : size === "lg" ? "w-24 sm:w-32" : "w-[4.5rem] sm:w-[5.25rem]";
+  const sizesAttr = size === "sm" ? "48px" : size === "lg" ? "(max-width:640px) 96px, 128px" : "84px";
   const safeSrc = safeImageSrc(src);
 
   useEffect(() => {
