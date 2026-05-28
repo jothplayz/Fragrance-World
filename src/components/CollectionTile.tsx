@@ -31,7 +31,7 @@ export function CollectionTile({
   wearCount?: number;
   lastWornAt?: string | null;
   onRemove?: () => void;
-  onWoreToday?: () => void;
+  onWoreToday?: () => void | Promise<void>;
 }) {
   const [failed, setFailed] = useState(false);
   const [logging, setLogging] = useState(false);
@@ -48,8 +48,7 @@ export function CollectionTile({
     if (logging) return;
     setLogging(true);
     try {
-      await fetch(`/api/fragrances/${id}/wear`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      onWoreToday?.();
+      await onWoreToday?.();
     } finally {
       setLogging(false);
     }
