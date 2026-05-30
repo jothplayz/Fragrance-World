@@ -561,7 +561,7 @@ export default function Home() {
         {/* ── Favorites lately ── */}
         {(() => {
           const favorites = fragrances
-            .filter(f => f.recentWearCount > 0)
+            .filter(f => f.recentWearCount > 4)
             .sort((a, b) => b.recentWearCount - a.recentWearCount)
             .slice(0, 6);
           if (favorites.length === 0) return null;

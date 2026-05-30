@@ -41,7 +41,7 @@ function normalizeSeasons(input: unknown): string {
 
 export async function GET() {
   try {
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const [raw, recentGroups] = await Promise.all([
       prisma.fragrance.findMany({
         orderBy: { createdAt: "desc" },
@@ -56,7 +56,7 @@ export async function GET() {
       }),
       prisma.wearLog.groupBy({
         by: ["fragranceId"],
-        where: { wornAt: { gte: ninetyDaysAgo } },
+        where: { wornAt: { gte: sevenDaysAgo } },
         _count: { id: true },
       }),
     ]);
