@@ -587,20 +587,22 @@ export default function Home() {
         <h2 className="mb-4 shrink-0 font-[family-name:var(--font-fraunces)] text-xl text-[var(--text)]">
           Collection <span className="text-[var(--muted)]">({fragrances.length})</span>
         </h2>
-        {fragrances.length === 0 && (
-          <p className="text-[var(--muted)]">Nothing here yet — search on the left to add your first bottle.</p>
-        )}
-        {fragrances.length > 0 && (
-          <div className="grid auto-rows-fr gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}>
-            {fragrances.map((f) => (
-              <CollectionTile key={f.id} id={f.id} imageSrc={f.imageUrl ?? ""}
-                ariaLabel={`Open details: ${f.name} by ${f.brand}`}
-                wearCount={f.wearCount ?? 0} lastWornAt={f.lastWornAt ?? null}
-                onRemove={() => void removeFragrance(f.id)}
-                onWoreToday={() => void logWear(f.id)} />
-            ))}
-          </div>
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+          {fragrances.length === 0 && (
+            <p className="text-[var(--muted)]">Nothing here yet — search on the left to add your first bottle.</p>
+          )}
+          {fragrances.length > 0 && (
+            <div className="grid auto-rows-fr gap-2 pb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}>
+              {fragrances.map((f) => (
+                <CollectionTile key={f.id} id={f.id} imageSrc={f.imageUrl ?? ""}
+                  ariaLabel={`Open details: ${f.name} by ${f.brand}`}
+                  wearCount={f.wearCount ?? 0} lastWornAt={f.lastWornAt ?? null}
+                  onRemove={() => void removeFragrance(f.id)}
+                  onWoreToday={() => void logWear(f.id)} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ══ CITY MODAL ══ */}
