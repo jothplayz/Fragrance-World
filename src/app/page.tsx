@@ -102,6 +102,8 @@ export default function Home() {
   const [weekLoading, setWeekLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+  const [pickLogging, setPickLogging] = useState(false);
+  const [pickLogged, setPickLogged] = useState(false);
 
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,6 +356,14 @@ export default function Home() {
     setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
   }
 
+  async function logPickWear(id: string) {
+    setPickLogging(true);
+    await logWear(id);
+    setPickLogged(true);
+    setPickLogging(false);
+    setTimeout(() => setPickLogged(false), 3000);
+  }
+
   async function selectOccasion(o: Occasion | null) {
     setTodayOccasion(o);
     setLoading(true);
@@ -486,6 +496,20 @@ export default function Home() {
                       {today.pick.fragranticaUrl && (
                         <a href={today.pick.fragranticaUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[var(--accent)] underline underline-offset-2">Fragrantica ↗</a>
                       )}
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => void logPickWear(today.pick!.id)}
+                          disabled={pickLogging || pickLogged}
+                          className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                            pickLogged
+                              ? "border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent)]"
+                              : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]"
+                          }`}
+                        >
+                          {pickLogging ? "Logging…" : pickLogged ? "✓ Logged" : "Wore this today"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

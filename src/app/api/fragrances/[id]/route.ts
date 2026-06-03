@@ -4,6 +4,8 @@ import { enrichFragranceRecord } from "@/lib/enrich-fragrance";
 import { prisma } from "@/lib/db";
 import { readJsonBody } from "@/lib/request-json";
 import { TAG_OPTIONS } from "@/lib/tag-options";
+import { SEASON_OPTIONS } from "@/lib/season-options";
+import { OCCASION_OPTIONS } from "@/lib/occasion-options";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,11 +35,29 @@ function normalizeTags(input: unknown): string {
   return JSON.stringify(ok);
 }
 
+function normalizeSeasons(input: unknown): string {
+  if (!Array.isArray(input)) return "[]";
+  const ok = input.filter(
+    (t): t is string => typeof t === "string" && SEASON_OPTIONS.includes(t as (typeof SEASON_OPTIONS)[number])
+  );
+  return JSON.stringify(ok);
+}
+
+function normalizeOccasions(input: unknown): string {
+  if (!Array.isArray(input)) return "[]";
+  const ok = input.filter(
+    (t): t is string => typeof t === "string" && OCCASION_OPTIONS.includes(t as (typeof OCCASION_OPTIONS)[number])
+  );
+  return JSON.stringify(ok);
+}
+
 export async function PATCH(request: Request, ctx: Ctx) {
   const parsed = await readJsonBody<{
     name?: string;
     brand?: string;
     tags?: unknown;
+    seasons?: unknown;
+    occasions?: unknown;
     notes?: string;
     fragranticaUrl?: string;
     imageUrl?: string;
@@ -59,6 +79,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
         ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
         ...(typeof body.brand === "string" ? { brand: body.brand.trim() } : {}),
         ...(body.tags !== undefined ? { tags: normalizeTags(body.tags) } : {}),
+        ...(body.seasons !== undefined ? { seasons: normalizeSeasons(body.seasons) } : {}),
+        ...(body.occasions !== undefined ? { occasions: normalizeOccasions(body.occasions) } : {}),
         ...(typeof body.notes === "string" ? { notes: body.notes } : {}),
         ...(typeof body.fragranticaUrl === "string" ? { fragranticaUrl: body.fragranticaUrl.trim() } : {}),
         ...(typeof body.imageUrl === "string" ? { imageUrl: body.imageUrl.trim() } : {}),

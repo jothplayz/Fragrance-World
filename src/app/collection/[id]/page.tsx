@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BottleThumb } from "@/components/BottleThumb";
 import { ExpandableNotes } from "@/components/ExpandableNotes";
 import { FragranceInsightPanels } from "@/components/FragranceInsightPanels";
+import { EditFragranceModal } from "@/components/EditFragranceModal";
 import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
 import {
   buildTextForFragranceParsing,
@@ -13,6 +14,8 @@ import {
 import { parseFragranceDescription } from "@/lib/parse-fragrance-notes";
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
+import { parseSeasonsFromJson } from "@/lib/season-options";
+import { parseOccasionsFromJson } from "@/lib/occasion-options";
 import { findSimilarFragrances } from "@/lib/fragrance-similarity";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +52,8 @@ export default async function CollectionDetailPage({ params }: Props) {
 
   const imageUrl = f.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(f.fragranticaUrl);
   const tags = parseTagsFromJson(f.tags);
+  const seasons = parseSeasonsFromJson(f.seasons);
+  const occasions = parseOccasionsFromJson(f.occasions);
   const enrichment = parseEnrichmentJson(f.enrichmentJson);
   const parseInput = buildTextForFragranceParsing(f.notes, f.enrichmentJson);
   const parsed = parseFragranceDescription(parseInput);
@@ -68,12 +73,27 @@ export default async function CollectionDetailPage({ params }: Props) {
         >
           ← Collection
         </Link>
-        <Link
-          href="/"
-          className="text-sm text-[var(--muted)] underline decoration-[var(--border)] underline-offset-4 hover:text-[var(--text)]"
-        >
-          Home
-        </Link>
+        <div className="flex items-center gap-3">
+          <EditFragranceModal
+            id={f.id}
+            initial={{
+              name: f.name,
+              brand: f.brand,
+              tags,
+              seasons,
+              occasions,
+              notes: f.notes,
+              fragranticaUrl: f.fragranticaUrl,
+              imageUrl: f.imageUrl ?? "",
+            }}
+          />
+          <Link
+            href="/"
+            className="text-sm text-[var(--muted)] underline decoration-[var(--border)] underline-offset-4 hover:text-[var(--text)]"
+          >
+            Home
+          </Link>
+        </div>
       </nav>
 
       <header className="mb-10 flex flex-col items-center gap-8 sm:flex-row sm:items-start sm:gap-10">
