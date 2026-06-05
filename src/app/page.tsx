@@ -69,6 +69,39 @@ type TodayPayload =
     }
   | { ok: false; reason: string; message?: string };
 
+// ── Pick cache ──────────────────────────────────────────────────────────────
+// Keeps today's recommendation stable after wear is logged.
+// Keyed by occasion so each occasion gets its own cached pick.
+const PICK_CACHE_KEY = "frag-today-picks";
+type PickCacheMap = Record<string, { date: string; payload: TodayPayload }>;
+
+function loadPickCache(occasion: string | null): TodayPayload | null {
+  try {
+    const raw = localStorage.getItem(PICK_CACHE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as PickCacheMap;
+    const item = map[occasion ?? "any"];
+    if (!item) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    return item.date === today ? item.payload : null;
+  } catch { return null; }
+}
+
+function savePickCache(payload: TodayPayload, occasion: string | null) {
+  try {
+    const raw = localStorage.getItem(PICK_CACHE_KEY);
+    const map: PickCacheMap = raw ? (JSON.parse(raw) as PickCacheMap) : {};
+    const today = new Date().toISOString().slice(0, 10);
+    for (const k of Object.keys(map)) { if (map[k].date !== today) delete map[k]; }
+    map[occasion ?? "any"] = { date: today, payload };
+    localStorage.setItem(PICK_CACHE_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+function clearPickCache() {
+  try { localStorage.removeItem(PICK_CACHE_KEY); } catch {}
+}
+
 export default function Home() {
   const [fragrances, setFragrances] = useState<FragranceRow[]>([]);
   const [cityQuery, setCityQuery] = useState("");
@@ -108,20 +141,26 @@ export default function Home() {
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadToday = useCallback(async (occasion: Occasion | null) => {
+  const loadToday = useCallback(async (occasion: Occasion | null, forceNewPick = false) => {
+    if (forceNewPick) clearPickCache();
+    const cached = !forceNewPick ? loadPickCache(occasion) : null;
+    if (cached) { setToday(cached); return; }
     const qs = occasion ? `?occasion=${occasion}` : "";
     const tRes = await fetch(`/api/today${qs}`);
     const tJson = (await tRes.json()) as TodayPayload;
     if (tJson && typeof tJson === "object" && "ok" in tJson) {
+      if (tJson.ok && tJson.pick) savePickCache(tJson, occasion);
       setToday(tJson);
     } else {
       setToday({ ok: false, reason: "server_error", message: "Unexpected response from /api/today." });
     }
   }, []);
 
-  const load = useCallback(async (occasion: Occasion | null = null) => {
+  const load = useCallback(async (occasion: Occasion | null = null, forceNewPick = false) => {
     setLoading(true);
     setLoadError(null);
+    if (forceNewPick) clearPickCache();
+    const cachedPick = !forceNewPick ? loadPickCache(occasion) : null;
     try {
       setWeekLoading(true);
       const qs = occasion ? `?occasion=${occasion}` : "";
@@ -147,8 +186,12 @@ export default function Home() {
         (typeof sJson.displayName === "string" ? sJson.displayName : "") ||
           (typeof sJson.cityQuery === "string" ? sJson.cityQuery : "")
       );
-      if (tJson && typeof tJson === "object" && "ok" in tJson) {
-        setToday(tJson);
+      const pickPayload = cachedPick ?? tJson;
+      if (!cachedPick && tJson && typeof tJson === "object" && "ok" in tJson) {
+        if (tJson.ok && tJson.pick) savePickCache(tJson, occasion);
+      }
+      if (pickPayload && typeof pickPayload === "object" && "ok" in pickPayload) {
+        setToday(pickPayload);
       } else {
         setToday({ ok: false, reason: "server_error", message: "Unexpected response from /api/today." });
       }
@@ -436,7 +479,7 @@ export default function Home() {
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]">
                 {savedCity ? `📍 ${savedCity}` : "📍 Set city"}
               </button>
-              <button type="button" onClick={() => void load(todayOccasion)} disabled={loading}
+              <button type="button" onClick={() => void load(todayOccasion, true)} disabled={loading}
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)] disabled:opacity-50">
                 {loading ? "…" : "↻"}
               </button>
@@ -511,6 +554,18 @@ export default function Home() {
                         </button>
                       </div>
                     </div>
+                  </div>
+                )}
+                {today.pick && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void load(todayOccasion, true)}
+                      disabled={loading}
+                      className="mt-1 text-[10px] text-[var(--muted)] hover:text-[var(--accent)] disabled:opacity-40 transition-colors"
+                    >
+                      Not that one →
+                    </button>
                   </div>
                 )}
                 {today.secondPick && (

@@ -107,6 +107,53 @@ function occasionScore(fragranceOccasions: Occasion[], selected: Occasion | null
   return fragranceOccasions.includes(selected) ? 6 : 0;
 }
 
+/** Season-temperature mismatch penalty / bonus.
+ *  Heavy negative for wearing winter scents in heat or summer scents in cold.
+ *  Adjacent seasons score neutrally; matching seasons get a small bonus. */
+function seasonScore(seasonJson: string, tempVibe: Vibe): number {
+  let seasons: string[];
+  try { seasons = JSON.parse(seasonJson) as string[]; if (!Array.isArray(seasons)) seasons = []; }
+  catch { seasons = []; }
+  if (seasons.length === 0) return 0;
+
+  const hasSummer = seasons.includes("summer");
+  const hasWinter = seasons.includes("winter");
+  const hasSpring = seasons.includes("spring");
+  const hasFall   = seasons.includes("fall");
+
+  switch (tempVibe) {
+    case "hot":
+      if (hasWinter && !hasSummer && !hasSpring) return -7; // pure winter scent in heat
+      if (hasWinter && !hasSummer) return -4;               // winter + fall only
+      if (hasWinter && hasSummer) return -1;                // spans both extremes
+      if (hasSummer) return 3;
+      if (hasSpring) return 1;
+      return 0;
+    case "warm":
+      if (hasWinter && !hasSummer && !hasSpring) return -4;
+      if (hasWinter && !hasSummer) return -2;
+      if (hasSummer || hasSpring) return 2;
+      return 0;
+    case "mild":
+      if (hasSpring || hasFall) return 2;
+      return 0;
+    case "cool":
+      if (hasSummer && !hasFall && !hasWinter) return -3;
+      if (hasFall) return 2;
+      if (hasWinter) return 1;
+      return 0;
+    case "cold":
+      if (hasSummer && !hasWinter && !hasFall) return -7; // pure summer scent in cold
+      if (hasSummer && !hasWinter) return -4;             // summer + spring only
+      if (hasSummer && hasWinter) return -1;
+      if (hasWinter) return 3;
+      if (hasFall) return 1;
+      return 0;
+    default:
+      return 0;
+  }
+}
+
 /** True when a fragrance covers every possible occasion — a true all-rounder */
 function isVersatile(occasions: Occasion[]): boolean {
   return OCCASION_OPTIONS.every((o) => occasions.includes(o));
@@ -146,9 +193,11 @@ export function rankFragrances(
     const occasions = parseOccasions(f.occasions);
     const stats: WearStats = f.wearStats ?? { lastWornAt: null, wearCount: 0 };
 
+    const tempVibe = vibes.find((v) => v !== "wet") ?? "mild";
     const ws = weatherScore(tags, vibes);
     const score =
       ws
+      + seasonScore(f.seasons, tempVibe)
       + occasionScore(occasions, selectedOccasion)
       + rotationBonus(stats.lastWornAt)
       - recencyPenalty(stats.lastWornAt);
