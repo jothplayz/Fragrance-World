@@ -65,6 +65,7 @@ type TodayPayload =
       selectedOccasion: Occasion | null;
       pick: PickShape | null;
       secondPick: PickShape | null;
+      picks: PickShape[];
       collectionCount: number;
     }
   | { ok: false; reason: string; message?: string };
@@ -135,8 +136,8 @@ export default function Home() {
   const [weekLoading, setWeekLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
-  const [pickLogging, setPickLogging] = useState(false);
-  const [pickLogged, setPickLogged] = useState(false);
+  const [pickLoggingId, setPickLoggingId] = useState<string | null>(null);
+  const [pickLoggedId, setPickLoggedId] = useState<string | null>(null);
 
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -400,11 +401,11 @@ export default function Home() {
   }
 
   async function logPickWear(id: string) {
-    setPickLogging(true);
+    setPickLoggingId(id);
     await logWear(id);
-    setPickLogged(true);
-    setPickLogging(false);
-    setTimeout(() => setPickLogged(false), 3000);
+    setPickLoggingId(null);
+    setPickLoggedId(id);
+    setTimeout(() => setPickLoggedId(null), 3000);
   }
 
   async function selectOccasion(o: Occasion | null) {
@@ -459,7 +460,9 @@ export default function Home() {
               <h1 className="font-[family-name:var(--font-fraunces)] text-lg font-medium text-[var(--text)]">
                 Fragrance Wardrobe
               </h1>
-              <h2 className="text-xs text-[var(--accent)]">Today&apos;s pick</h2>
+              <h2 className="text-xs text-[var(--accent)]">
+                {todayOccasion ? `Top picks for ${todayOccasion}` : "Today’s pick"}
+              </h2>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/wardrobe"
@@ -517,7 +520,44 @@ export default function Home() {
                 </p>
                 {today.collectionCount === 0 && <p className="text-xs text-[var(--muted)]">Add a fragrance to get a pick.</p>}
                 {today.collectionCount > 0 && !today.pick && <p className="text-xs text-[var(--muted)]">No match — try refreshing.</p>}
-                {today.collectionCount > 0 && today.pick && (
+
+                {/* ── Multi-pick list (occasion selected) ── */}
+                {todayOccasion && (today.picks ?? []).length > 0 && (
+                  <ul className="space-y-2 overflow-y-auto">
+                    {(today.picks ?? []).map((p, i) => (
+                      <li key={p.id} className={`flex items-center gap-3 rounded-xl border p-2.5 transition-colors ${i === 0 ? "border-[var(--accent)]/40 bg-[var(--surface)]" : "border-[var(--border)]/60 bg-[var(--surface)]/40"}`}>
+                        <span className="w-4 shrink-0 text-center text-[10px] font-semibold text-[var(--muted)]">{i + 1}</span>
+                        <BottleThumb src={p.imageUrl} label={p.name} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-[var(--text)]">{p.name}</p>
+                          <p className="truncate text-xs text-[var(--muted)]">{p.brand}</p>
+                          {p.tags.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {p.tags.slice(0, 3).map((t) => (
+                                <span key={t} className="rounded-full bg-[var(--accent-soft)]/30 px-1.5 py-0.5 text-[10px] text-[var(--accent)]">{t}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void logPickWear(p.id)}
+                          disabled={pickLoggingId !== null || pickLoggedId === p.id}
+                          className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-medium transition-colors disabled:opacity-50 ${
+                            pickLoggedId === p.id
+                              ? "border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent)]"
+                              : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]"
+                          }`}
+                        >
+                          {pickLoggingId === p.id ? "…" : pickLoggedId === p.id ? "✓ Wore" : "Wore this"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* ── Single pick (no occasion) ── */}
+                {!todayOccasion && today.collectionCount > 0 && today.pick && (
                   <div className="flex items-center gap-4 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/50 p-3">
                     <BottleThumb src={today.pick.imageUrl} label={today.pick.name} size="lg" />
                     <div className="min-w-0 flex-1">
@@ -543,20 +583,20 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => void logPickWear(today.pick!.id)}
-                          disabled={pickLogging || pickLogged}
+                          disabled={pickLoggingId !== null || pickLoggedId === today.pick!.id}
                           className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
-                            pickLogged
+                            pickLoggedId === today.pick!.id
                               ? "border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent)]"
                               : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-soft)] hover:text-[var(--text)]"
                           }`}
                         >
-                          {pickLogging ? "Logging…" : pickLogged ? "✓ Logged" : "Wore this today"}
+                          {pickLoggingId === today.pick!.id ? "Logging…" : pickLoggedId === today.pick!.id ? "✓ Logged" : "Wore this today"}
                         </button>
                       </div>
                     </div>
                   </div>
                 )}
-                {today.pick && (
+                {!todayOccasion && today.pick && (
                   <div className="flex justify-end">
                     <button
                       type="button"
@@ -568,7 +608,7 @@ export default function Home() {
                     </button>
                   </div>
                 )}
-                {today.secondPick && (
+                {!todayOccasion && today.secondPick && (
                   <div className="mt-3">
                     <p className="mb-1.5 text-xs text-[var(--muted)]">Short longevity — consider also for later:</p>
                     <div className="flex items-center gap-3 rounded-xl border border-[var(--border)]/50 bg-[var(--surface)]/30 p-2.5">

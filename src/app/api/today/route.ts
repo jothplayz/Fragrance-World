@@ -90,6 +90,11 @@ export async function GET(request: Request) {
       };
     }
 
+    const picks = ranked.slice(0, 3).map((row) => {
+      const img = row.fragrance.imageUrl?.trim() || imageUrlFromFragranticaPerfumeUrl(row.fragrance.fragranticaUrl);
+      return pickShape(row, img);
+    });
+
     return NextResponse.json({
       ok: true,
       location: {
@@ -113,6 +118,7 @@ export async function GET(request: Request) {
       selectedOccasion,
       pick: best ? pickShape(best, pickImage) : null,
       secondPick: second ? pickShape(second, secondImage) : null,
+      picks,
       collectionCount: fragrances.length,
     });
   } catch (e) {
