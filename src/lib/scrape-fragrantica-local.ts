@@ -61,8 +61,10 @@ function extractFromJsonLd(jsonLd: Array<Record<string, unknown>>) {
 }
 
 function extractLongevity(html: string): "short" | "moderate" | "long" | "" {
+  // Fragrantica's longevity vote bars are labelled (low → high):
+  // very weak, weak, moderate, long lasting, eternal.
   const levels = [
-    { label: "poor", tier: 1 },
+    { label: "very weak", tier: 1 },
     { label: "weak", tier: 2 },
     { label: "moderate", tier: 3 },
     { label: "long lasting", tier: 4 },
@@ -188,9 +190,22 @@ export async function scrapeFragranticaUrl(url: string): Promise<FragranticaPrev
       // Wait for the real page (h1 microdata) — survives the Cloudflare
       // challenge redirect and returns as soon as content is up.
       await page.waitForSelector('h1[itemprop="name"]', { timeout: 15_000 });
-      // Season/longevity vote bars hydrate client-side after the h1 exists;
-      // extractSeasons/extractLongevity read their inline width styles.
-      await page.waitForSelector('span:text-is("winter")', { timeout: 6_000 }).catch(() => {});
+      // The season/longevity/sillage vote bars are lazy-mounted far down the
+      // page and only hydrate once scrolled into view. Smooth-scroll to the
+      // bottom so they render, then read their inline width styles. Passed as a
+      // string so the tsx script runner doesn't rewrite the in-page function.
+      await page.evaluate(`new Promise((resolve) => {
+        let y = 0;
+        const step = () => {
+          window.scrollBy(0, 600);
+          y += 600;
+          if (y < document.body.scrollHeight) setTimeout(step, 100);
+          else resolve();
+        };
+        step();
+      })`);
+      // Longevity bars are the last to appear; wait for one before capturing.
+      await page.waitForSelector('span:text-is("long lasting")', { timeout: 8_000 }).catch(() => {});
     } catch {
       // keep whatever HTML we have
     }
