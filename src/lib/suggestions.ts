@@ -4,6 +4,7 @@ import { TAG_OPTIONS } from "./tag-options";
 import type { Occasion } from "./occasion-options";
 import { OCCASION_OPTIONS } from "./occasion-options";
 import { isWetCode, type WeatherToday } from "./weather";
+import { parseSeasonsFromJson } from "./season-options";
 
 export { TAG_OPTIONS, type FragranceTag } from "./tag-options";
 export { OCCASION_OPTIONS, type Occasion } from "./occasion-options";
@@ -111,9 +112,7 @@ function occasionScore(fragranceOccasions: Occasion[], selected: Occasion | null
  *  Heavy negative for wearing winter scents in heat or summer scents in cold.
  *  Adjacent seasons score neutrally; matching seasons get a small bonus. */
 function seasonScore(seasonJson: string, tempVibe: Vibe): number {
-  let seasons: string[];
-  try { seasons = JSON.parse(seasonJson) as string[]; if (!Array.isArray(seasons)) seasons = []; }
-  catch { seasons = []; }
+  const seasons = parseSeasonsFromJson(seasonJson);
   if (seasons.length === 0) return 0;
 
   const hasSummer = seasons.includes("summer");
@@ -154,6 +153,31 @@ function seasonScore(seasonJson: string, tempVibe: Vibe): number {
   }
 }
 
+/** Hard seasonal guardrail: returns false for fragrances that are clearly
+ *  out of season for the current weather, so they are never recommended —
+ *  pure fall/winter scents on warm days, pure spring/summer scents on cold
+ *  days. Fragrances with no season data, or that span the temperature divide
+ *  (e.g. tagged both summer and winter), are always allowed. "Mild" weather is
+ *  treated as neutral — every scent stays in the running there. */
+function isInSeason(seasonJson: string, tempVibe: Vibe): boolean {
+  const seasons = parseSeasonsFromJson(seasonJson);
+  if (seasons.length === 0) return true; // unknown — don't exclude
+
+  const hasSummer = seasons.includes("summer");
+  const hasSpring = seasons.includes("spring");
+  const hasWinter = seasons.includes("winter");
+  const hasFall   = seasons.includes("fall");
+
+  const warmWeather = tempVibe === "hot" || tempVibe === "warm";
+  const coldWeather = tempVibe === "cold" || tempVibe === "cool";
+
+  // Cold-only scent (fall/winter, no warm season) on a warm day → out.
+  if (warmWeather && (hasWinter || hasFall) && !hasSummer && !hasSpring) return false;
+  // Warm-only scent (spring/summer, no cold season) on a cold day → out.
+  if (coldWeather && (hasSummer || hasSpring) && !hasWinter && !hasFall) return false;
+  return true;
+}
+
 /** True when a fragrance covers every possible occasion — a true all-rounder */
 function isVersatile(occasions: Occasion[]): boolean {
   return OCCASION_OPTIONS.every((o) => occasions.includes(o));
@@ -187,13 +211,13 @@ export function rankFragrances(
   selectedOccasion: Occasion | null = null
 ): SuggestionRow[] {
   const vibes = vibesFromWeather(weather);
+  const tempVibe = vibes.find((v) => v !== "wet") ?? "mild";
 
   const rows: SuggestionRow[] = items.map((f) => {
     const tags = parseTags(f.tags);
     const occasions = parseOccasions(f.occasions);
     const stats: WearStats = f.wearStats ?? { lastWornAt: null, wearCount: 0 };
 
-    const tempVibe = vibes.find((v) => v !== "wet") ?? "mild";
     const ws = weatherScore(tags, vibes);
     const score =
       ws
@@ -207,19 +231,27 @@ export function rankFragrances(
 
   rows.sort((a, b) => b.score - a.score);
 
-  // Versatile fragrances (all occasions) cycle to the top, sorted by least recently worn
-  const versatile = rows.filter((r) => isVersatile(r.occasions));
+  // Hard seasonal guardrail — drop clearly out-of-season scents (winter/fall on
+  // hot days, summer/spring on cold days) so they're never recommended. Falls
+  // back to the full list if filtering would leave nothing to suggest.
+  const inSeason = rows.filter((r) => isInSeason(r.fragrance.seasons, tempVibe));
+  const pool = inSeason.length > 0 ? inSeason : rows;
+
+  // Versatile fragrances (all occasions) cycle to the top, sorted by least
+  // recently worn — but only among in-season picks, so an all-rounder can't
+  // jump the seasonal guardrail.
+  const versatile = pool.filter((r) => isVersatile(r.occasions));
   if (versatile.length > 0) {
     versatile.sort((a, b) => {
       const at = a.wearStats.lastWornAt?.getTime() ?? 0;
       const bt = b.wearStats.lastWornAt?.getTime() ?? 0;
       return at - bt;
     });
-    const rest = rows.filter((r) => !isVersatile(r.occasions));
+    const rest = pool.filter((r) => !isVersatile(r.occasions));
     return [...versatile, ...rest];
   }
 
-  return rows;
+  return pool;
 }
 
 export function humanVibeLabel(vibes: Vibe[]): string {
