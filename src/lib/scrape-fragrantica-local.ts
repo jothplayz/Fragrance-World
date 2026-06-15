@@ -4,6 +4,7 @@ import { imageUrlFromFragranticaPerfumeUrl } from "./apify-fragrantica";
 import { SEASON_OPTIONS, type Season } from "./season-options";
 import { inferOccasions } from "./infer-occasions";
 import { inferTags } from "./infer-tags";
+import { newFragranticaContext } from "./fragrantica-browser";
 
 function firstNonEmpty(...vals: Array<string | undefined | null>): string {
   for (const v of vals) {
@@ -177,44 +178,25 @@ function htmlToPreview(html: string, canonicalUrl: string): FragranticaPreview {
 }
 
 export async function scrapeFragranticaUrl(url: string): Promise<FragranticaPreview> {
-  let chromium: typeof import("playwright").chromium;
-  try {
-    ({ chromium } = await import("playwright"));
-  } catch {
-    throw new Error(
-      "PLAYWRIGHT_NOT_INSTALLED: Run: npx playwright install chromium"
-    );
-  }
-
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"],
-  });
+  const context = await newFragranticaContext();
 
   let html = "";
   try {
-    const context = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      extraHTTPHeaders: {
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.9",
-        "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate",
-        "sec-fetch-site": "none",
-      },
-    });
     const page = await context.newPage();
     try {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-      // Wait for JS challenge to resolve if Cloudflare fires
-      await page.waitForTimeout(7000);
+      // Wait for the real page (h1 microdata) — survives the Cloudflare
+      // challenge redirect and returns as soon as content is up.
+      await page.waitForSelector('h1[itemprop="name"]', { timeout: 15_000 });
+      // Season/longevity vote bars hydrate client-side after the h1 exists;
+      // extractSeasons/extractLongevity read their inline width styles.
+      await page.waitForSelector('span:text-is("winter")', { timeout: 6_000 }).catch(() => {});
     } catch {
       // keep whatever HTML we have
     }
     html = await page.content();
   } finally {
-    await browser.close();
+    await context.close();
   }
 
   if (/just a moment/i.test(html) && html.length < 15_000) {

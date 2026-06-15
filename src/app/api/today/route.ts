@@ -17,6 +17,15 @@ export async function GET(request: Request) {
       ? (occasionParam as Occasion)
       : null;
 
+  // Ranking is deterministic, so "not that one" needs the rejected ids passed
+  // back; otherwise the same top pick returns every time.
+  const excludeIds = new Set(
+    (searchParams.get("exclude") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+
   try {
     const settings = await prisma.appSettings.findUnique({ where: { id: 1 } });
     const lat = settings?.latitude;
@@ -60,7 +69,12 @@ export async function GET(request: Request) {
     }
 
     const vibes = vibesFromWeather(weather);
-    const ranked = rankFragrances(fragrances, weather, selectedOccasion);
+    let ranked = rankFragrances(fragrances, weather, selectedOccasion);
+    if (excludeIds.size > 0) {
+      const filtered = ranked.filter((r) => !excludeIds.has(r.fragrance.id));
+      // Everything rejected — start the rotation over rather than return nothing
+      if (filtered.length > 0) ranked = filtered;
+    }
     const best = ranked[0];
     const pickImage =
       best &&

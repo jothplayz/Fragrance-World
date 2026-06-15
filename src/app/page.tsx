@@ -70,6 +70,13 @@ type TodayPayload =
     }
   | { ok: false; reason: string; message?: string };
 
+// Local calendar date (YYYY-MM-DD) — toISOString() is UTC, which rolls over
+// mid-evening in US timezones and would expire the pick / break "today" filters.
+function localDateString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // ── Pick cache ──────────────────────────────────────────────────────────────
 // Keeps today's recommendation stable after wear is logged.
 // Keyed by occasion so each occasion gets its own cached pick.
@@ -83,8 +90,7 @@ function loadPickCache(occasion: string | null): TodayPayload | null {
     const map = JSON.parse(raw) as PickCacheMap;
     const item = map[occasion ?? "any"];
     if (!item) return null;
-    const today = new Date().toISOString().slice(0, 10);
-    return item.date === today ? item.payload : null;
+    return item.date === localDateString() ? item.payload : null;
   } catch { return null; }
 }
 
@@ -92,7 +98,7 @@ function savePickCache(payload: TodayPayload, occasion: string | null) {
   try {
     const raw = localStorage.getItem(PICK_CACHE_KEY);
     const map: PickCacheMap = raw ? (JSON.parse(raw) as PickCacheMap) : {};
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateString();
     for (const k of Object.keys(map)) { if (map[k].date !== today) delete map[k]; }
     map[occasion ?? "any"] = { date: today, payload };
     localStorage.setItem(PICK_CACHE_KEY, JSON.stringify(map));
@@ -141,12 +147,18 @@ export default function Home() {
 
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Picks rejected via "Not that one" this session — sent as ?exclude= so the
+  // deterministic ranking moves on instead of returning the same bottle.
+  const rejectedPickIdsRef = useRef<string[]>([]);
 
-  const loadToday = useCallback(async (occasion: Occasion | null, forceNewPick = false) => {
+  const loadToday = useCallback(async (occasion: Occasion | null, forceNewPick = false, excludeIds: string[] = []) => {
     if (forceNewPick) clearPickCache();
     const cached = !forceNewPick ? loadPickCache(occasion) : null;
     if (cached) { setToday(cached); return; }
-    const qs = occasion ? `?occasion=${occasion}` : "";
+    const params = new URLSearchParams();
+    if (occasion) params.set("occasion", occasion);
+    if (excludeIds.length > 0) params.set("exclude", excludeIds.join(","));
+    const qs = params.size > 0 ? `?${params.toString()}` : "";
     const tRes = await fetch(`/api/today${qs}`);
     const tJson = (await tRes.json()) as TodayPayload;
     if (tJson && typeof tJson === "object" && "ok" in tJson) {
@@ -160,6 +172,7 @@ export default function Home() {
   const load = useCallback(async (occasion: Occasion | null = null, forceNewPick = false) => {
     setLoading(true);
     setLoadError(null);
+    rejectedPickIdsRef.current = [];
     if (forceNewPick) clearPickCache();
     const cachedPick = !forceNewPick ? loadPickCache(occasion) : null;
     try {
@@ -275,7 +288,9 @@ export default function Home() {
     };
   }, [fcQuery]);
 
-  async function saveCity(e: React.FormEvent) {
+  // Returns success so the modal can close on the result instead of reading
+  // citySaveError from a stale closure (state isn't updated mid-handler).
+  async function saveCity(e: React.FormEvent): Promise<boolean> {
     e.preventDefault();
     setSavingCity(true);
     setCitySaveError(null);
@@ -288,11 +303,15 @@ export default function Home() {
       const body = (await res.json()) as { error?: string; displayName?: string; cityQuery?: string };
       if (!res.ok) {
         setCitySaveError(typeof body.error === "string" ? body.error : "Could not save city.");
-        return;
+        return false;
       }
       setSavedCity(body.displayName || body.cityQuery || "");
-      const tRes = await fetch("/api/today");
-      setToday((await tRes.json()) as TodayPayload);
+      // New city → cached pick and weekly list are for the old weather.
+      await load(todayOccasion, true);
+      return true;
+    } catch {
+      setCitySaveError("Network error. Try again.");
+      return false;
     } finally {
       setSavingCity(false);
     }
@@ -383,33 +402,64 @@ export default function Home() {
   }
 
   async function removeFragrance(id: string) {
-    await fetch(`/api/fragrances/${id}`, { method: "DELETE" });
+    try {
+      const res = await fetch(`/api/fragrances/${id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 404) {
+        setLoadError("Could not remove that fragrance. Try again.");
+        return;
+      }
+    } catch {
+      setLoadError("Network error while removing. Try again.");
+      return;
+    }
     await load(todayOccasion);
   }
 
-  async function logWear(id: string) {
-    await fetch(`/api/fragrances/${id}/wear`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ occasion: todayOccasion ?? "" }),
-    });
-    // Only refresh the collection list — don't re-rank today's pick,
-    // since the worn fragrance would get a recency penalty and flip to something else.
-    const fRes = await fetch("/api/fragrances");
-    const fJson = (await fRes.json()) as unknown;
-    setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
+  async function logWear(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/fragrances/${id}/wear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ occasion: todayOccasion ?? "" }),
+      });
+      if (!res.ok) {
+        setLoadError("Could not log that wear. Try again.");
+        return false;
+      }
+      // Only refresh the collection list — don't re-rank today's pick,
+      // since the worn fragrance would get a recency penalty and flip to something else.
+      const fRes = await fetch("/api/fragrances");
+      const fJson = (await fRes.json()) as unknown;
+      setFragrances(Array.isArray(fJson) ? (fJson as FragranceRow[]) : []);
+      return true;
+    } catch {
+      setLoadError("Network error while logging wear. Try again.");
+      return false;
+    }
   }
 
   async function logPickWear(id: string) {
     setPickLoggingId(id);
-    await logWear(id);
+    const ok = await logWear(id);
     setPickLoggingId(null);
+    if (!ok) return;
     setPickLoggedId(id);
     setTimeout(() => setPickLoggedId(null), 3000);
   }
 
+  async function rejectPick(id: string) {
+    rejectedPickIdsRef.current.push(id);
+    setLoading(true);
+    try {
+      await loadToday(todayOccasion, true, rejectedPickIdsRef.current);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function selectOccasion(o: Occasion | null) {
     setTodayOccasion(o);
+    rejectedPickIdsRef.current = [];
     setLoading(true);
     try {
       await loadToday(o);
@@ -600,7 +650,7 @@ export default function Home() {
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => void load(todayOccasion, true)}
+                      onClick={() => void rejectPick(today.pick!.id)}
                       disabled={loading}
                       className="mt-1 text-[10px] text-[var(--muted)] hover:text-[var(--accent)] disabled:opacity-40 transition-colors"
                     >
@@ -641,7 +691,7 @@ export default function Home() {
             )}
             {!weekLoading && weekDays.length > 0 && (
               <ul className="space-y-1.5">
-                {weekDays.filter((day) => day.date !== new Date().toISOString().slice(0, 10)).map((day) => {
+                {weekDays.filter((day) => day.date !== localDateString()).map((day) => {
                   const d = new Date(day.date + "T12:00:00");
                   const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
                   const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -738,7 +788,7 @@ export default function Home() {
               <a href="https://open-meteo.com/" className="text-[var(--accent)] underline underline-offset-2">Open-Meteo</a>.
               Currently: <span className="text-[var(--text)]">{savedCity || "not set"}</span>
             </p>
-            <form onSubmit={async (e) => { await saveCity(e); if (!citySaveError) setShowCityModal(false); }} className="flex gap-2">
+            <form onSubmit={async (e) => { const ok = await saveCity(e); if (ok) setShowCityModal(false); }} className="flex gap-2">
               <input value={cityQuery} onChange={(e) => { setCityQuery(e.target.value); setCitySaveError(null); }}
                 placeholder="e.g. Austin, TX or London, UK"
                 className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
@@ -772,6 +822,11 @@ export default function Home() {
                 <div className="flex items-center gap-2 text-xs text-[var(--muted)]"><Spinner /> Searching…</div>
               )}
               {fcError ? <p className="text-xs text-amber-200/90">{fcError}</p> : null}
+              {fcResults.length > 0 && fcSearchSource === "fragrantica" && (
+                <p className="text-xs text-[var(--muted)]">
+                  Live results from Fragrantica — details fill in after you pick one.
+                </p>
+              )}
               {fcResults.length > 0 && (
                 <ul className="space-y-1" role="listbox">
                   {fcResults.map((r, i) => (

@@ -4,7 +4,6 @@ import { imageUrlFromFragranticaPerfumeUrl, type FragranticaPreview } from "@/li
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
 import { parseSeasonsFromJson } from "@/lib/season-options";
-import { parseOccasionsFromJson } from "@/lib/occasion-options";
 import { inferOccasions } from "@/lib/infer-occasions";
 import { inferTagsFromNotes } from "@/lib/infer-tags";
 

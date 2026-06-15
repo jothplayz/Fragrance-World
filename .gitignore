@@ -21,6 +21,7 @@
 # portable Node (Windows ZIP extract)
 /.tools/
 /node-v*-win-x64/
+/.node-portable/
 
 # misc
 .DS_Store

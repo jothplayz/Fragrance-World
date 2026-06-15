@@ -6,6 +6,7 @@ import { parseSeasonsFromJson } from "@/lib/season-options";
 import { inferOccasions } from "@/lib/infer-occasions";
 import { inferTagsFromNotes } from "@/lib/infer-tags";
 import { imageUrlFromFragranticaPerfumeUrl, normalizeFragranticaUrl, type FragranticaPreview } from "@/lib/apify-fragrantica";
+import { newFragranticaContext } from "@/lib/fragrantica-browser";
 
 type CatalogRow = {
   name: string;
@@ -30,26 +31,15 @@ type SearchResult = {
 };
 
 async function searchFragranticaByName(query: string): Promise<SearchResult[]> {
-  let chromium: typeof import("playwright").chromium;
-  try {
-    ({ chromium } = await import("playwright"));
-  } catch {
-    throw new Error("PLAYWRIGHT_NOT_INSTALLED");
-  }
-
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"],
-  });
+  const context = await newFragranticaContext();
 
   try {
-    const context = await browser.newContext({
-      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    });
     const page = await context.newPage();
     const searchUrl = `https://www.fragrantica.com/search/?query=${encodeURIComponent(query)}`;
     await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
-    await page.waitForTimeout(5000);
+    // Results render client-side; wait for cards instead of a fixed sleep.
+    // Timeout (no-result queries) falls through to evaluate(), which returns [].
+    await page.waitForSelector(".prefumeHbox", { timeout: 8_000 }).catch(() => {});
 
     const results = await page.evaluate((): SearchResult[] => {
       const cards = document.querySelectorAll(".prefumeHbox");
@@ -71,7 +61,7 @@ async function searchFragranticaByName(query: string): Promise<SearchResult[]> {
       brand: new URL(r.url).pathname.split("/")[2]?.replace(/-/g, " ") ?? "",
     }));
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
 
@@ -133,6 +123,26 @@ export async function GET(request: Request) {
         fragranticaUrl: canonical, imageUrl,
       };
     });
+
+    // Cache the sparse previews so repeat searches hit the local catalog
+    // instantly. `update: {}` keeps fully-scraped rows untouched; sparse rows
+    // (empty notes) get a full scrape on click via /api/fragrances/fragrantica.
+    await Promise.all(
+      previews
+        .filter((p) => p.fragranticaUrl)
+        .map((p) =>
+          prisma.fragranceCatalog.upsert({
+            where: { fragranticaUrl: p.fragranticaUrl },
+            create: {
+              name: p.name,
+              brand: p.brand,
+              fragranticaUrl: p.fragranticaUrl,
+              imageUrl: p.imageUrl ?? "",
+            },
+            update: {},
+          }).catch(() => null)
+        )
+    );
 
     return NextResponse.json({ results: previews, source: "fragrantica" });
   } catch (e) {

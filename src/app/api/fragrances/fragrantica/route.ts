@@ -5,7 +5,6 @@ import { readJsonBody } from "@/lib/request-json";
 import { prisma } from "@/lib/db";
 import { parseTagsFromJson } from "@/lib/tag-options";
 import { parseSeasonsFromJson } from "@/lib/season-options";
-import { parseOccasionsFromJson } from "@/lib/occasion-options";
 import { inferOccasions } from "@/lib/infer-occasions";
 import { inferTagsFromNotes } from "@/lib/infer-tags";
 import { imageUrlFromFragranticaPerfumeUrl } from "@/lib/apify-fragrantica";
@@ -77,7 +76,8 @@ export async function POST(request: Request) {
     where: { fragranticaUrl: canonical },
   }).catch(() => null);
 
-  if (cached) {
+  // Rows with empty notes are sparse search-result stubs — fall through to a full scrape.
+  if (cached && cached.notes.trim()) {
     const preview = catalogToPreview(cached);
     // Backfill tags in DB if the cached entry pre-dates tag inference
     if (parseTagsFromJson(cached.tags).length === 0 && preview.tags.length > 0) {
